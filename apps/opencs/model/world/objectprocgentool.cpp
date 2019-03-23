@@ -64,19 +64,6 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellYSpinBoxCornerB->setRange(-99999999, 99999999);
     mCellYSpinBoxCornerB->setValue(0);
 
-    mGeneratedObjects.push_back(new QComboBox(this));
-
-    CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (
-        *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Referenceables));
-
-    for (auto i : mGeneratedObjects)
-    {
-        for (int j = 0; j < referenceablesTable.rowCount(); ++j)
-        {
-            i->addItem(QString::fromStdString(referenceablesTable.getId(j)));
-        }
-    }
-
     mDeleteGenerationObjectButton = new QPushButton("-", this);
     mNewGenerationObjectButton = new QPushButton("+", this);
     mDeleteGenerationObjectButton->setStyleSheet("border: 1px solid #000000; border-radius:8px;");
@@ -95,15 +82,7 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellCoordinatesLayout->addWidget(mCellXSpinBoxCornerB);
     mCellCoordinatesLayout->addWidget(mCellYSpinBoxCornerB);
 
-    for (auto i : mGeneratedObjects)
-    {
-        mGeneratedObjectChanceSpinBoxes.push_back(new QDoubleSpinBox);
-        mGeneratedObjectChanceSpinBoxes.back()->setRange(0.f, 1.f);
-        mGeneratedObjectChanceSpinBoxes.back()->setSingleStep(0.1f);
-        mGeneratedObjectChanceSpinBoxes.back()->setValue(0.7f);
-        mGeneratedObjectsLayout->addWidget(i);
-        mGeneratedObjectsLayout->addWidget(mGeneratedObjectChanceSpinBoxes.back());
-    }
+    createNewGenerationObject();
 
     mMainLayout->addLayout(mCellCoordinatesLayout);
     mMainLayout->addLayout(mGeneratedObjectsLayout);
@@ -123,6 +102,7 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
 
     CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Referenceables));
+
     for (int j = 0; j < referenceablesTable.rowCount(); ++j)
     {
         mGeneratedObjects.back()->addItem(QString::fromStdString(referenceablesTable.getId(j)));

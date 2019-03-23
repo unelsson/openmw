@@ -6,6 +6,7 @@
 
 #include <QMainWindow>
 
+#include "../../model/world/objectprocgentool.hpp"
 #include "subviewfactory.hpp"
 
 class QAction;
@@ -56,6 +57,7 @@ namespace CSVDoc
             GlobalDebugProfileMenu *mGlobalDebugProfileMenu;
             QScrollArea *mScroll;
             bool mScrollbarOnly;
+            CSMWorld::ObjectProcGenTool mProcGenTool;
 
 
             // not implemented
@@ -254,6 +256,8 @@ namespace CSVDoc
             void addSearchSubView();
 
             void addMetaDataSubView();
+
+            void showProcGenTool();
 
             void toggleShowStatusBar (bool show);
 

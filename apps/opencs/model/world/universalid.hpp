@@ -91,6 +91,7 @@ namespace CSMWorld
                 Type_References,
                 Type_Reference,
                 Type_RegionMap,
+                Type_ObjectProcGenTool,
                 Type_Filters,
                 Type_Filter,
                 Type_Topics,

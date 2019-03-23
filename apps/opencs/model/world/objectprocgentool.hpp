@@ -26,7 +26,7 @@ namespace CSMWorld
 
         private:
         void createInterface();
-        void placeObject(int, int, float, float);
+        void placeObject(QString, int, int, float, float);
 
         CSMDoc::Document& mDocument;
         QGroupBox *mSpinBoxGroup;

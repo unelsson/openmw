@@ -69,26 +69,32 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mNewGenerationObjectButton = new QPushButton("+", this);
     mDeleteGenerationObjectButton->setStyleSheet("border: 1px solid #000000; border-radius:8px;");
     mNewGenerationObjectButton->setStyleSheet("border: 1px solid #000000; border-radius:8px;");
+    QHBoxLayout *deleteNewButtonsLayout = new QHBoxLayout;
+    deleteNewButtonsLayout->addWidget(mDeleteGenerationObjectButton);
+    deleteNewButtonsLayout->addWidget(mNewGenerationObjectButton);
 
     mActionButton = new QPushButton("Generate!", this);
 
     mMainLayout = new QVBoxLayout;
-    mCellCoordinatesLayout = new QVBoxLayout;
+    mCellCoordinatesQHBoxLayout = new QHBoxLayout;
+    mCellCoordinatesQVBoxLayoutA = new QVBoxLayout;
+    mCellCoordinatesQVBoxLayoutB = new QVBoxLayout;
     mGeneratedObjectsLayout = new QVBoxLayout;
 
-    mCellCoordinatesLayout->addWidget(mCornerALabel);
-    mCellCoordinatesLayout->addWidget(mCellXSpinBoxCornerA);
-    mCellCoordinatesLayout->addWidget(mCellYSpinBoxCornerA);
-    mCellCoordinatesLayout->addWidget(mCornerBLabel);
-    mCellCoordinatesLayout->addWidget(mCellXSpinBoxCornerB);
-    mCellCoordinatesLayout->addWidget(mCellYSpinBoxCornerB);
+    mCellCoordinatesQVBoxLayoutA->addWidget(mCornerALabel);
+    mCellCoordinatesQVBoxLayoutA->addWidget(mCellXSpinBoxCornerA);
+    mCellCoordinatesQVBoxLayoutA->addWidget(mCellYSpinBoxCornerA);
+    mCellCoordinatesQVBoxLayoutB->addWidget(mCornerBLabel);
+    mCellCoordinatesQVBoxLayoutB->addWidget(mCellXSpinBoxCornerB);
+    mCellCoordinatesQVBoxLayoutB->addWidget(mCellYSpinBoxCornerB);
+    mCellCoordinatesQHBoxLayout->addLayout(mCellCoordinatesQVBoxLayoutA);
+    mCellCoordinatesQHBoxLayout->addLayout(mCellCoordinatesQVBoxLayoutB);
 
     createNewGenerationObject();
 
-    mMainLayout->addLayout(mCellCoordinatesLayout);
+    mMainLayout->addLayout(mCellCoordinatesQHBoxLayout);
     mMainLayout->addLayout(mGeneratedObjectsLayout);
-    mMainLayout->addWidget(mDeleteGenerationObjectButton);
-    mMainLayout->addWidget(mNewGenerationObjectButton);
+    mMainLayout->addLayout(deleteNewButtonsLayout);
     mMainLayout->addWidget(mActionButton);
     mSpinBoxGroup->setLayout(mMainLayout);
 }
@@ -99,6 +105,9 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     QHBoxLayout* generatedObjectGroupBoxLayout; //layout holding single generation object
     generatedObjectGroupBox = new QGroupBox;
     generatedObjectGroupBoxLayout = new QHBoxLayout;
+
+    generatedObjectGroupBox->setObjectName("generatedObjectGroupBox");
+    generatedObjectGroupBox->setStyleSheet("QGroupBox#generatedObjectGroupBox {border: 1px solid #000000;}");
 
     mGeneratedObjects.push_back(new QComboBox(this));
     CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (
@@ -114,6 +123,7 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     mGeneratedObjectChanceSpinBoxes.back()->setRange(0.f, 1.f);
     mGeneratedObjectChanceSpinBoxes.back()->setSingleStep(0.1f);
     mGeneratedObjectChanceSpinBoxes.back()->setValue(0.7f);
+    mGeneratedObjectChanceSpinBoxes.back()->setDecimals(3);
 
     QLabel* ltexLabel;
     ltexLabel = new QLabel(tr("Tex:"));
@@ -152,6 +162,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
+    std::uniform_real_distribution<double> distRot(-3.12, 3.12);
+    std::uniform_real_distribution<double> distSmallRot(-0.08, 0.08);
 
     CSMWorld::IdTable& landTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
@@ -174,7 +186,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                             dist(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
                                 placeObject(mGeneratedObjects[objectCount]->currentText(), cellId, cellX, cellY,
                                     cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize,
-                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize);
+                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize,
+                                    distSmallRot(mt), distSmallRot(mt), distRot(mt));
                     }
                 }
             }
@@ -182,7 +195,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
     }
 }
 
-void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cellId, int cellX, int cellY, float xWorldPos, float yWorldPos)
+void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cellId, int cellX, int cellY, float xWorldPos, float yWorldPos,
+    float xRot, float yRot, float zRot)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_References));
@@ -215,11 +229,11 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cell
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionXRot), float(rand() % 40 - 20)/100);
+        CSMWorld::Columns::ColumnId_PositionXRot), xRot);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionYRot), float(rand() % 40 - 20)/100);
+        CSMWorld::Columns::ColumnId_PositionYRot), yRot);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionZRot), float(rand() % 624 - 312)/100);
+        CSMWorld::Columns::ColumnId_PositionZRot), zRot);
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_ReferenceableId),
         objectId);

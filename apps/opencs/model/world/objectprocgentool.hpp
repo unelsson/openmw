@@ -26,7 +26,7 @@ namespace CSMWorld
 
         private:
         void createInterface();
-        void placeObject(QString, std::string, int, int, float, float);
+        void placeObject(QString, std::string, int, int, float, float, float, float, float);
 
         CSMDoc::Document& mDocument;
         QGroupBox *mSpinBoxGroup;
@@ -40,7 +40,9 @@ namespace CSMWorld
         QPushButton *mNewGenerationObjectButton;
         QPushButton *mActionButton;
         QVBoxLayout *mMainLayout;
-        QVBoxLayout *mCellCoordinatesLayout;
+        QVBoxLayout *mCellCoordinatesQVBoxLayoutA;
+        QVBoxLayout *mCellCoordinatesQVBoxLayoutB;
+        QHBoxLayout *mCellCoordinatesQHBoxLayout;
         QVBoxLayout *mGeneratedObjectsLayout; //Layout holding all generated objects
         std::vector<QComboBox*> mGeneratedObjects;
         std::vector<QDoubleSpinBox*> mGeneratedObjectChanceSpinBoxes;

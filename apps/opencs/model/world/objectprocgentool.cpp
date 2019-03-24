@@ -7,6 +7,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGroupBox>
 #include <QUndoStack>
 #include <QPushButton>
 #include <QComboBox>
@@ -94,22 +95,43 @@ void CSMWorld::ObjectProcGenTool::createInterface()
 
 void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
 {
-    mGeneratedObjects.push_back(new QComboBox(this));
-    mGeneratedObjectChanceSpinBoxes.push_back(new QDoubleSpinBox);
-    mGeneratedObjectChanceSpinBoxes.back()->setRange(0.f, 1.f);
-    mGeneratedObjectChanceSpinBoxes.back()->setSingleStep(0.1f);
-    mGeneratedObjectChanceSpinBoxes.back()->setValue(0.7f);
+    QGroupBox* generatedObjectGroupBox; //layout holding single generation object
+    QHBoxLayout* generatedObjectGroupBoxLayout; //layout holding single generation object
+    generatedObjectGroupBox = new QGroupBox;
+    generatedObjectGroupBoxLayout = new QHBoxLayout;
 
+    mGeneratedObjects.push_back(new QComboBox(this));
     CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Referenceables));
-
     for (int j = 0; j < referenceablesTable.rowCount(); ++j)
     {
         mGeneratedObjects.back()->addItem(QString::fromStdString(referenceablesTable.getId(j)));
     }
 
-    mGeneratedObjectsLayout->addWidget(mGeneratedObjects.back());
-    mGeneratedObjectsLayout->addWidget(mGeneratedObjectChanceSpinBoxes.back());
+    QLabel* chanceLabel;
+    chanceLabel = new QLabel(tr("%"));
+    mGeneratedObjectChanceSpinBoxes.push_back(new QDoubleSpinBox);
+    mGeneratedObjectChanceSpinBoxes.back()->setRange(0.f, 1.f);
+    mGeneratedObjectChanceSpinBoxes.back()->setSingleStep(0.1f);
+    mGeneratedObjectChanceSpinBoxes.back()->setValue(0.7f);
+
+    QLabel* ltexLabel;
+    ltexLabel = new QLabel(tr("Tex:"));
+    mGeneratedObjectTerrainTexType.push_back(new QComboBox);
+    CSMWorld::IdTable& ltexTable = dynamic_cast<CSMWorld::IdTable&> (
+        *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_LandTextures));
+    for (int j = 0; j < ltexTable.rowCount(); ++j)
+    {
+        mGeneratedObjectTerrainTexType.back()->addItem(QString::fromStdString(ltexTable.getId(j)));
+    }
+
+    generatedObjectGroupBoxLayout->addWidget(mGeneratedObjects.back());
+    generatedObjectGroupBoxLayout->addWidget(chanceLabel);
+    generatedObjectGroupBoxLayout->addWidget(mGeneratedObjectChanceSpinBoxes.back());
+    generatedObjectGroupBoxLayout->addWidget(ltexLabel);
+    generatedObjectGroupBoxLayout->addWidget(mGeneratedObjectTerrainTexType.back());
+    generatedObjectGroupBox->setLayout(generatedObjectGroupBoxLayout);
+    mGeneratedObjectsLayout->addWidget(generatedObjectGroupBox);
 }
 
 void CSMWorld::ObjectProcGenTool::deleteGenerationObject()
@@ -117,8 +139,6 @@ void CSMWorld::ObjectProcGenTool::deleteGenerationObject()
     if(mGeneratedObjects.size() > 1)
     {
         QWidget *toBeDeleted;
-        if ((toBeDeleted = mGeneratedObjectsLayout->takeAt(mGeneratedObjectsLayout->count() - 1)->widget()) != 0)
-            delete toBeDeleted;
         if ((toBeDeleted = mGeneratedObjectsLayout->takeAt(mGeneratedObjectsLayout->count() - 1)->widget()) != 0)
             delete toBeDeleted;
 
@@ -133,20 +153,28 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
+    CSMWorld::IdTable& landTable = dynamic_cast<CSMWorld::IdTable&> (
+        *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
+    int textureColumn = landTable.findColumnIndex(CSMWorld::Columns::ColumnId_LandTexturesIndex);
+
     for (int cellX = mCellXSpinBoxCornerA->value(); cellX <= mCellXSpinBoxCornerB->value(); ++cellX)
     {
         for (int cellY = mCellXSpinBoxCornerA->value(); cellY <= mCellXSpinBoxCornerB->value(); ++cellY)
         {
+            std::string cellId ("#" + std::to_string(cellX) + " " + std::to_string(cellY)); // should be CSVRender::TerrainSelection::generateId()
+            CSMWorld::LandTexturesColumn::DataType landTexPointer = landTable.data(landTable.getModelIndex(cellId, textureColumn)).value<CSMWorld::LandTexturesColumn::DataType>();
             for (int xInCell = 0; xInCell < landTextureSize; ++xInCell)
             {
                 for (int yInCell = 0; yInCell < landTextureSize; ++yInCell)
                 {
                     for(std::vector<int>::size_type objectCount = 0; objectCount != mGeneratedObjects.size(); objectCount++)
                     {
-                        if(dist(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
-                            placeObject(mGeneratedObjects[objectCount]->currentText(), cellX, cellY,
-                                cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize,
-                                cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize);
+                        std::size_t hashlocation = mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().find("#");
+                        if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
+                            dist(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
+                                placeObject(mGeneratedObjects[objectCount]->currentText(), cellId, cellX, cellY,
+                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize,
+                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize);
                     }
                 }
             }
@@ -154,7 +182,7 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
     }
 }
 
-void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, int cellX, int cellY, float xWorldPos, float yWorldPos)
+void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cellId, int cellX, int cellY, float xWorldPos, float yWorldPos)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_References));
@@ -170,7 +198,6 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, int cellX, int c
     //This is also in CSVRender::TerrainSelection::calculateLandHeight, should be moved to CellCoordinates class
     int localX (x - cellX * (landSize - 1));
     int localY (y - cellY * (landSize - 1));
-    std::string cellId ("#" + std::to_string(cellX) + " " + std::to_string(cellY)); // should be CSVRender::TerrainSelection::generateId()
     int landshapeColumn = landTable.findColumnIndex(CSMWorld::Columns::ColumnId_LandHeightsIndex);
     const CSMWorld::LandHeightsColumn::DataType mPointer = landTable.data(landTable.getModelIndex(cellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
     float zWorldPos = mPointer[localY*landSize + localX];

@@ -126,6 +126,8 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mMainLayout->addWidget(mRandomRotation);
     mMainLayout->addWidget(mRandomDisplacementLabel);
     mMainLayout->addWidget(mRandomDisplacement);
+    mMainLayout->addWidget(mZDisplacementLabel);
+    mMainLayout->addWidget(mZDisplacement);
     mMainLayout->addWidget(mFollowLandShapeLabel);
     mMainLayout->addWidget(mFollowLandShapeFactor);
     mMainLayout->addWidget(mActionButton);

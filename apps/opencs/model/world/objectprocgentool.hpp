@@ -10,6 +10,8 @@
 #include <QPushButton>
 #include <QComboBox>
 
+#include <osg/Quat>
+
 #include "../doc/document.hpp"
 
 #include "cellcoordinates.hpp"
@@ -27,6 +29,8 @@ namespace CSMWorld
         private:
         void createInterface();
         void placeObject(QString, std::string, int, int, float, float, float, float, float);
+        osg::Vec3f quatToEuler(const osg::Quat& quat) const;
+        osg::Quat eulerToQuat(const osg::Vec3f& euler) const;
 
         CSMDoc::Document& mDocument;
         QGroupBox *mSpinBoxGroup;
@@ -36,6 +40,8 @@ namespace CSMWorld
         QSpinBox *mCellYSpinBoxCornerA;
         QSpinBox *mCellXSpinBoxCornerB;
         QSpinBox *mCellYSpinBoxCornerB;
+        QLabel *mFollowLandShapeLabel;
+        QDoubleSpinBox *mFollowLandShapeFactor;
         QPushButton *mDeleteGenerationObjectButton;
         QPushButton *mNewGenerationObjectButton;
         QPushButton *mActionButton;

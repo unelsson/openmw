@@ -65,6 +65,11 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellYSpinBoxCornerB->setRange(-99999999, 99999999);
     mCellYSpinBoxCornerB->setValue(0);
 
+    mFollowLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));;
+    mFollowLandShapeFactor = new QDoubleSpinBox;
+    mFollowLandShapeFactor->setRange(-1.0f, 1.0f);
+    mFollowLandShapeFactor->setValue(0.0f);
+
     mDeleteGenerationObjectButton = new QPushButton("-", this);
     mNewGenerationObjectButton = new QPushButton("+", this);
     mDeleteGenerationObjectButton->setStyleSheet("border: 1px solid #000000; border-radius:8px;");
@@ -95,6 +100,8 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mMainLayout->addLayout(mCellCoordinatesQHBoxLayout);
     mMainLayout->addLayout(mGeneratedObjectsLayout);
     mMainLayout->addLayout(deleteNewButtonsLayout);
+    mMainLayout->addWidget(mFollowLandShapeLabel);
+    mMainLayout->addWidget(mFollowLandShapeFactor);
     mMainLayout->addWidget(mActionButton);
     mSpinBoxGroup->setLayout(mMainLayout);
 }
@@ -185,14 +192,46 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                         if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
                             dist(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
                                 placeObject(mGeneratedObjects[objectCount]->currentText(), cellId, cellX, cellY,
-                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize,
-                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize,
+                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize, // Calculate worldPos from landtex coordinate
+                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize, // Calculate worldPos from landtex coordinate
                                     distSmallRot(mt), distSmallRot(mt), distRot(mt));
                     }
                 }
             }
         }
     }
+}
+
+// This is a copy of of CSVRender::InstanceMode::quatToEuler
+osg::Vec3f CSMWorld::ObjectProcGenTool::quatToEuler(const osg::Quat& rot) const
+{
+    float x, y, z;
+    float test = 2 * (rot.w() * rot.y() + rot.x() * rot.z());
+
+    if (std::abs(test) >= 1.f)
+    {
+        x = atan2(rot.x(), rot.w());
+        y = (test > 0) ? (osg::PI / 2) : (-osg::PI / 2);
+        z = 0;
+    }
+    else
+    {
+        x = std::atan2(2 * (rot.w() * rot.x() - rot.y() * rot.z()), 1 - 2 * (rot.x() * rot.x() + rot.y() * rot.y()));
+        y = std::asin(test);
+        z = std::atan2(2 * (rot.w() * rot.z() - rot.x() * rot.y()), 1 - 2 * (rot.y() * rot.y() + rot.z() * rot.z()));
+    }
+
+    return osg::Vec3f(-x, -y, -z);
+}
+
+// This is a copy of of CSVRender::InstanceMode::eulerToQuat
+osg::Quat CSMWorld::ObjectProcGenTool::eulerToQuat(const osg::Vec3f& euler) const
+{
+    osg::Quat xr = osg::Quat(-euler[0], osg::Vec3f(1,0,0));
+    osg::Quat yr = osg::Quat(-euler[1], osg::Vec3f(0,1,0));
+    osg::Quat zr = osg::Quat(-euler[2], osg::Vec3f(0,0,1));
+
+    return zr * yr * xr;
 }
 
 void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cellId, int cellX, int cellY, float xWorldPos, float yWorldPos,
@@ -204,17 +243,68 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cell
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
 
     //This should be CSMWorld::CellCoordinates::toVertexCoords(xWorldPos, yWorldPos)
+    //Calculate global vertex coordinate from WorldPos
     const auto xd = static_cast<float>(xWorldPos * (landSize - 1) / cellSize + 0.5f);
     const auto yd = static_cast<float>(yWorldPos * (landSize - 1) / cellSize + 0.5f);
     const auto x = static_cast<int>(std::floor(xd));
     const auto y = static_cast<int>(std::floor(yd));
 
     //This is also in CSVRender::TerrainSelection::calculateLandHeight, should be moved to CellCoordinates class
+    //Calculate local vertex coordinate from global vertex coordinate
     int localX (x - cellX * (landSize - 1));
     int localY (y - cellY * (landSize - 1));
     int landshapeColumn = landTable.findColumnIndex(CSMWorld::Columns::ColumnId_LandHeightsIndex);
-    const CSMWorld::LandHeightsColumn::DataType mPointer = landTable.data(landTable.getModelIndex(cellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
-    float zWorldPos = mPointer[localY*landSize + localX];
+    const CSMWorld::LandHeightsColumn::DataType landPointer = landTable.data(landTable.getModelIndex(cellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
+    float zWorldPos = landPointer[localY*landSize + localX];
+
+    //These are used for calculating slopes. Defaults to no slope (eg. in cell edge).
+    float zWorldPosXPlus1 = zWorldPos;
+    float zWorldPosYPlus1 = zWorldPos;
+
+    if (localX < landSize - 2) zWorldPosXPlus1 = landPointer[localY*landSize + localX + 1];
+    else
+    {
+        std::string rightCellId ("#" + std::to_string(cellX + 1) + " " + std::to_string(cellY)); // should be CSVRender::TerrainSelection::generateId()
+        const CSMWorld::LandHeightsColumn::DataType rightLandPointer = landTable.data(landTable.getModelIndex(rightCellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
+        zWorldPosXPlus1 = rightLandPointer[localY*landSize + 1];
+    }
+    if (localY < landSize - 2) zWorldPosYPlus1 = landPointer[(localY + 1)*landSize + localX];
+    else
+    {
+        std::string downCellId ("#" + std::to_string(cellX) + " " + std::to_string(cellY + 1)); // should be CSVRender::TerrainSelection::generateId()
+        const CSMWorld::LandHeightsColumn::DataType downLandPointer = landTable.data(landTable.getModelIndex(downCellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
+        zWorldPosYPlus1 = downLandPointer[localX + 1];
+    }
+
+    float xSlope = zWorldPosXPlus1 - zWorldPos;
+    float ySlope = zWorldPosYPlus1 - zWorldPos;
+
+    osg::Vec3f axisX;
+    osg::Vec3f axisY;
+    axisX[0] = 1;
+    axisX[1] = 0;
+    axisX[2] = 0;
+    axisY[0] = 0;
+    axisY[1] = 1;
+    axisY[2] = 0;
+
+    osg::Quat rotationX;
+    osg::Quat rotationY;
+
+    rotationX = osg::Quat(-std::atan((xSlope / (cellSize / landSize)) * mFollowLandShapeFactor->value()), axisX);
+    rotationY = osg::Quat(std::atan((ySlope / (cellSize / landSize)) * mFollowLandShapeFactor->value()), axisY);
+
+    //Quat rotation code is a modified from CSVRender::InstanceMode::drag
+    osg::Quat currentRot = eulerToQuat(osg::Vec3f(xRot, yRot, zRot));
+    osg::Quat combined = currentRot * rotationX;
+    combined *= rotationY;
+    osg::Vec3f euler = quatToEuler(combined);
+    if (!euler.isNaN())
+    {
+        xRot = euler.x();
+        yRot = euler.y();
+        zRot = euler.z();
+    }
 
     std::unique_ptr<CSMWorld::CreateCommand> createCommand (
         new CSMWorld::CreateCommand (

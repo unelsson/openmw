@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QSpinBox>
+#include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -28,7 +29,7 @@ namespace CSMWorld
 
         private:
         void createInterface();
-        void placeObject(QString, std::string, int, int, float, float, float, float, float);
+        void placeObject(QString, float, float, float, float, float);
         osg::Vec3f quatToEuler(const osg::Quat& quat) const;
         osg::Quat eulerToQuat(const osg::Vec3f& euler) const;
 
@@ -42,6 +43,13 @@ namespace CSMWorld
         QSpinBox *mCellYSpinBoxCornerB;
         QLabel *mFollowLandShapeLabel;
         QDoubleSpinBox *mFollowLandShapeFactor;
+        QCheckBox *mRandomZRotationCheckBox;
+        QLabel *mRandomRotationLabel;
+        QDoubleSpinBox *mRandomRotation;
+        QLabel *mRandomDisplacementLabel;
+        QSpinBox *mRandomDisplacement;
+        QLabel *mZDisplacementLabel;
+        QSpinBox *mZDisplacement;
         QPushButton *mDeleteGenerationObjectButton;
         QPushButton *mNewGenerationObjectButton;
         QPushButton *mActionButton;

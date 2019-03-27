@@ -5,6 +5,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QSpinBox>
+#include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -67,8 +68,28 @@ void CSMWorld::ObjectProcGenTool::createInterface()
 
     mFollowLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));;
     mFollowLandShapeFactor = new QDoubleSpinBox;
-    mFollowLandShapeFactor->setRange(-1.0f, 1.0f);
-    mFollowLandShapeFactor->setValue(0.0f);
+    mFollowLandShapeFactor->setDecimals(2);
+    mFollowLandShapeFactor->setRange(-3.00f, 3.00f); //1.0f makes object point to normal direction
+    mFollowLandShapeFactor->setValue(0.25f);
+
+    mRandomZRotationCheckBox = new QCheckBox("Random z-rotation", this);
+    mRandomZRotationCheckBox->setChecked(true);
+
+    mRandomRotationLabel = new QLabel(tr("Random xy-rotation"));;
+    mRandomRotation = new QDoubleSpinBox;
+    mRandomRotation->setDecimals(2);
+    mRandomRotation->setRange(0.00f, 3.12f); //radians
+    mRandomRotation->setValue(0.08f);
+
+    mRandomDisplacementLabel = new QLabel(tr("Random displacement:"));;
+    mRandomDisplacement = new QSpinBox;
+    mRandomDisplacement->setRange(0, 99999999); //in worldspace units
+    mRandomDisplacement->setValue(500);
+
+    mZDisplacementLabel = new QLabel(tr("Z displacement:"));;
+    mZDisplacement = new QSpinBox;
+    mZDisplacement->setRange(-99999999, 99999999); //in worldspace units
+    mZDisplacement->setValue(0);
 
     mDeleteGenerationObjectButton = new QPushButton("-", this);
     mNewGenerationObjectButton = new QPushButton("+", this);
@@ -100,6 +121,11 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mMainLayout->addLayout(mCellCoordinatesQHBoxLayout);
     mMainLayout->addLayout(mGeneratedObjectsLayout);
     mMainLayout->addLayout(deleteNewButtonsLayout);
+    mMainLayout->addWidget(mRandomZRotationCheckBox);
+    mMainLayout->addWidget(mRandomRotationLabel);
+    mMainLayout->addWidget(mRandomRotation);
+    mMainLayout->addWidget(mRandomDisplacementLabel);
+    mMainLayout->addWidget(mRandomDisplacement);
     mMainLayout->addWidget(mFollowLandShapeLabel);
     mMainLayout->addWidget(mFollowLandShapeFactor);
     mMainLayout->addWidget(mActionButton);
@@ -168,13 +194,16 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
 {
     std::random_device rd;
     std::mt19937 mt(rd());
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-    std::uniform_real_distribution<double> distRot(-3.12, 3.12);
-    std::uniform_real_distribution<double> distSmallRot(-0.08, 0.08);
+    std::uniform_real_distribution<double> distChanceOfObject(0.0, 1.0);
+    std::uniform_real_distribution<double> distRot(-3.12 * mRandomZRotationCheckBox->isChecked(), 3.12 * mRandomZRotationCheckBox->isChecked());
+    std::uniform_real_distribution<double> distSmallRot(-mRandomRotation->value(), mRandomRotation->value());
+    std::uniform_int_distribution<int> distDisplacement(-mRandomDisplacement->value(), mRandomDisplacement->value());
 
     CSMWorld::IdTable& landTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
     int textureColumn = landTable.findColumnIndex(CSMWorld::Columns::ColumnId_LandTexturesIndex);
+
+    mDocument.getUndoStack().beginMacro ("Procedurally generate object references");
 
     for (int cellX = mCellXSpinBoxCornerA->value(); cellX <= mCellXSpinBoxCornerB->value(); ++cellX)
     {
@@ -190,16 +219,17 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                     {
                         std::size_t hashlocation = mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().find("#");
                         if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
-                            dist(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
-                                placeObject(mGeneratedObjects[objectCount]->currentText(), cellId, cellX, cellY,
-                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize, // Calculate worldPos from landtex coordinate
-                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize, // Calculate worldPos from landtex coordinate
+                            distChanceOfObject(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
+                                placeObject(mGeneratedObjects[objectCount]->currentText(),
+                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
+                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     distSmallRot(mt), distSmallRot(mt), distRot(mt));
                     }
                 }
             }
         }
     }
+    mDocument.getUndoStack().endMacro ();
 }
 
 // This is a copy of of CSVRender::InstanceMode::quatToEuler
@@ -234,7 +264,7 @@ osg::Quat CSMWorld::ObjectProcGenTool::eulerToQuat(const osg::Vec3f& euler) cons
     return zr * yr * xr;
 }
 
-void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cellId, int cellX, int cellY, float xWorldPos, float yWorldPos,
+void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos, float yWorldPos,
     float xRot, float yRot, float zRot)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
@@ -248,6 +278,11 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cell
     const auto yd = static_cast<float>(yWorldPos * (landSize - 1) / cellSize + 0.5f);
     const auto x = static_cast<int>(std::floor(xd));
     const auto y = static_cast<int>(std::floor(yd));
+
+    //This could be CSMWorld::CellCoordinates::vertexGlobalToCellId
+    int cellX = std::floor(static_cast<float>(x) / (landSize - 1));
+    int cellY = std::floor(static_cast<float>(y) / (landSize - 1));
+    std::string cellId ("#" + std::to_string(cellX) + " " + std::to_string(cellY)); // should be CSVRender::TerrainSelection::generateId()
 
     //This is also in CSVRender::TerrainSelection::calculateLandHeight, should be moved to CellCoordinates class
     //Calculate local vertex coordinate from global vertex coordinate
@@ -317,7 +352,7 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, std::string cell
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionYPos), yWorldPos);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos);
+        CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos + mZDisplacement->value());
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionXRot), xRot);
     createCommand->addValue (referencesTable.findColumnIndex (

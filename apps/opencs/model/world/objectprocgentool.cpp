@@ -1,6 +1,7 @@
 #include "objectprocgentool.hpp"
 
 #include <random>
+#include <fstream>
 
 #include <QWidget>
 #include <QLabel>
@@ -12,6 +13,10 @@
 #include <QUndoStack>
 #include <QPushButton>
 #include <QComboBox>
+#include <QFileDialog>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "../doc/document.hpp"
 #include "../world/idtable.hpp"
@@ -36,6 +41,8 @@ CSMWorld::ObjectProcGenTool::ObjectProcGenTool(CSMDoc::Document& document, QWidg
     connect(mActionButton, SIGNAL(clicked()), this, SLOT(placeObjectsNow()));
     connect(mNewGenerationObjectButton, SIGNAL(clicked()), this, SLOT(createNewGenerationObject()));
     connect(mDeleteGenerationObjectButton, SIGNAL(clicked()), this, SLOT(deleteGenerationObject()));
+    connect(mLoadGenerationSettingsButton, SIGNAL(clicked()), this, SLOT(loadGenerationSettings()));
+    connect(mSaveGenerationSettingsButton, SIGNAL(clicked()), this, SLOT(saveGenerationSettings()));
 }
 
 CSMWorld::ObjectProcGenTool::~ObjectProcGenTool()
@@ -99,6 +106,9 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     deleteNewButtonsLayout->addWidget(mDeleteGenerationObjectButton);
     deleteNewButtonsLayout->addWidget(mNewGenerationObjectButton);
 
+    mLoadGenerationSettingsButton = new QPushButton("Load...", this);
+    mSaveGenerationSettingsButton = new QPushButton("Save...", this);
+
     mActionButton = new QPushButton("Generate!", this);
 
     mMainLayout = new QVBoxLayout;
@@ -121,6 +131,8 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mMainLayout->addLayout(mCellCoordinatesQHBoxLayout);
     mMainLayout->addLayout(mGeneratedObjectsLayout);
     mMainLayout->addLayout(deleteNewButtonsLayout);
+    mMainLayout->addWidget(mLoadGenerationSettingsButton);
+    mMainLayout->addWidget(mSaveGenerationSettingsButton);
     mMainLayout->addWidget(mRandomZRotationCheckBox);
     mMainLayout->addWidget(mRandomRotationLabel);
     mMainLayout->addWidget(mRandomRotation);
@@ -190,6 +202,76 @@ void CSMWorld::ObjectProcGenTool::deleteGenerationObject()
         mGeneratedObjectChanceSpinBoxes.pop_back();
         mGeneratedObjects.pop_back();
     }
+}
+
+void CSMWorld::ObjectProcGenTool::loadGenerationSettings()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Procedural Generation Data"), "", tr("Data files (*.*)"));
+    std::ifstream settingsFile (fileName.toUtf8().constData());
+    std::string line;
+    long unsigned int objectCount = 0;
+    if (settingsFile.is_open())
+    {
+        while(!settingsFile.eof() && !settingsFile.fail())
+        {
+            getline(settingsFile, line);
+
+            size_t i = 0;
+
+            while (i < line.size() && std::isspace(line[i], std::locale::classic())) // skip whitespaces
+            {
+                ++i;
+            }
+            if (i >= line.size())
+                continue;
+
+            if (line[i] == '#') // skip comment
+                continue;
+
+            size_t settingEnd = line.find('=', i);
+            if (settingEnd == std::string::npos)
+            {
+                std::stringstream error;
+                error << "can't read procedural generation setting file";
+                throw std::runtime_error(error.str());
+            }
+
+            std::string setting = line.substr(i, (settingEnd-i));
+            boost::algorithm::trim(setting);
+
+            size_t valueBegin = settingEnd+1;
+            std::string value = line.substr(valueBegin);
+            boost::algorithm::trim(value);
+
+            if (setting == "objectName")
+            {
+                if(mGeneratedObjects.size() <= objectCount) createNewGenerationObject();
+                int index = mGeneratedObjects[objectCount]->findText(QString::fromStdString(value));
+                mGeneratedObjects[objectCount]->setCurrentIndex(index);
+            }
+
+            if (setting == "objectSpawnChance")
+            {
+                mGeneratedObjectChanceSpinBoxes[objectCount]->setValue(boost::lexical_cast<double>(value));
+                ++objectCount;
+            }
+
+        }
+    }
+    settingsFile.close();
+}
+
+void CSMWorld::ObjectProcGenTool::saveGenerationSettings()
+{
+    std::ofstream settingsFile;
+    settingsFile.open ("procgendata.txt");
+    settingsFile << "# This file was saved in OpenCS, and holds settings for procedurally generated objects. \n";
+    for(long unsigned int i = 0; i < mGeneratedObjects.size(); ++i)
+    {
+        settingsFile << "objectName = " << mGeneratedObjects[i]->currentText().toUtf8().constData() << "\n";
+        settingsFile << "objectSpawnChance = " << mGeneratedObjectChanceSpinBoxes[i]->value() << "\n";
+    }
+    settingsFile.close();
 }
 
 void CSMWorld::ObjectProcGenTool::placeObjectsNow()

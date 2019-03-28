@@ -52,6 +52,8 @@ namespace CSMWorld
         QSpinBox *mZDisplacement;
         QPushButton *mDeleteGenerationObjectButton;
         QPushButton *mNewGenerationObjectButton;
+        QPushButton *mLoadGenerationSettingsButton;
+        QPushButton *mSaveGenerationSettingsButton;
         QPushButton *mActionButton;
         QVBoxLayout *mMainLayout;
         QVBoxLayout *mCellCoordinatesQVBoxLayoutA;
@@ -67,6 +69,8 @@ namespace CSMWorld
         private slots:
         void createNewGenerationObject();
         void deleteGenerationObject();
+        void loadGenerationSettings();
+        void saveGenerationSettings();
         void placeObjectsNow();
     };
 }

@@ -73,31 +73,6 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellYSpinBoxCornerB->setRange(-99999999, 99999999);
     mCellYSpinBoxCornerB->setValue(0);
 
-    mFollowLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));;
-    mFollowLandShapeFactor = new QDoubleSpinBox;
-    mFollowLandShapeFactor->setDecimals(2);
-    mFollowLandShapeFactor->setRange(-3.00f, 3.00f); //1.0f makes object point to normal direction
-    mFollowLandShapeFactor->setValue(0.25f);
-
-    mRandomZRotationCheckBox = new QCheckBox("Random z-rotation", this);
-    mRandomZRotationCheckBox->setChecked(true);
-
-    mRandomRotationLabel = new QLabel(tr("Random xy-rotation"));;
-    mRandomRotation = new QDoubleSpinBox;
-    mRandomRotation->setDecimals(2);
-    mRandomRotation->setRange(0.00f, 3.12f); //radians
-    mRandomRotation->setValue(0.08f);
-
-    mRandomDisplacementLabel = new QLabel(tr("Random displacement:"));;
-    mRandomDisplacement = new QSpinBox;
-    mRandomDisplacement->setRange(0, 99999999); //in worldspace units
-    mRandomDisplacement->setValue(500);
-
-    mZDisplacementLabel = new QLabel(tr("Z displacement:"));;
-    mZDisplacement = new QSpinBox;
-    mZDisplacement->setRange(-99999999, 99999999); //in worldspace units
-    mZDisplacement->setValue(0);
-
     mDeleteGenerationObjectButton = new QPushButton("-", this);
     mNewGenerationObjectButton = new QPushButton("+", this);
     mDeleteGenerationObjectButton->setStyleSheet("border: 1px solid #000000; border-radius:8px;");
@@ -133,15 +108,6 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mMainLayout->addLayout(deleteNewButtonsLayout);
     mMainLayout->addWidget(mLoadGenerationSettingsButton);
     mMainLayout->addWidget(mSaveGenerationSettingsButton);
-    mMainLayout->addWidget(mRandomZRotationCheckBox);
-    mMainLayout->addWidget(mRandomRotationLabel);
-    mMainLayout->addWidget(mRandomRotation);
-    mMainLayout->addWidget(mRandomDisplacementLabel);
-    mMainLayout->addWidget(mRandomDisplacement);
-    mMainLayout->addWidget(mZDisplacementLabel);
-    mMainLayout->addWidget(mZDisplacement);
-    mMainLayout->addWidget(mFollowLandShapeLabel);
-    mMainLayout->addWidget(mFollowLandShapeFactor);
     mMainLayout->addWidget(mActionButton);
     mSpinBoxGroup->setLayout(mMainLayout);
 }
@@ -182,11 +148,51 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
         mGeneratedObjectTerrainTexType.back()->addItem(QString::fromStdString(ltexTable.getId(j)));
     }
 
+    QLabel* followLandShapeLabel;
+    followLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));;
+    mFollowLandShapeFactor.push_back(new QDoubleSpinBox);
+    mFollowLandShapeFactor.back()->setDecimals(2);
+    mFollowLandShapeFactor.back()->setRange(-3.00f, 3.00f); //1.0f makes object point to normal direction
+    mFollowLandShapeFactor.back()->setValue(0.25f);
+
+    mRandomZRotationCheckBox.push_back(new QCheckBox("Random z-rotation", this));
+    mRandomZRotationCheckBox.back()->setChecked(true);
+
+    QLabel* randomRotationLabel;
+    randomRotationLabel = new QLabel(tr("Random xy-rotation"));;
+    mRandomRotation.push_back(new QDoubleSpinBox);
+    mRandomRotation.back()->setDecimals(2);
+    mRandomRotation.back()->setRange(0.00f, 3.12f); //radians
+    mRandomRotation.back()->setValue(0.08f);
+
+    QLabel* randomDisplacementLabel;
+    randomDisplacementLabel = new QLabel(tr("Random displacement:"));;
+    mRandomDisplacement.push_back(new QSpinBox);
+    mRandomDisplacement.back()->setRange(0, 99999999); //in worldspace units
+    mRandomDisplacement.back()->setValue(500);
+
+    QLabel* zDisplacementLabel;
+    zDisplacementLabel = new QLabel(tr("Z displacement:"));;
+    mZDisplacement.push_back(new QSpinBox);
+    mZDisplacement.back()->setRange(-99999999, 99999999); //in worldspace units
+    mZDisplacement.back()->setValue(0);
+
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjects.back());
     generatedObjectGroupBoxLayout->addWidget(chanceLabel);
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjectChanceSpinBoxes.back());
     generatedObjectGroupBoxLayout->addWidget(ltexLabel);
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjectTerrainTexType.back());
+
+    generatedObjectGroupBoxLayout->addWidget(mRandomZRotationCheckBox.back());
+    generatedObjectGroupBoxLayout->addWidget(randomRotationLabel);
+    generatedObjectGroupBoxLayout->addWidget(mRandomRotation.back());
+    generatedObjectGroupBoxLayout->addWidget(randomDisplacementLabel);
+    generatedObjectGroupBoxLayout->addWidget(mRandomDisplacement.back());
+    generatedObjectGroupBoxLayout->addWidget(zDisplacementLabel);
+    generatedObjectGroupBoxLayout->addWidget(mZDisplacement.back());
+    generatedObjectGroupBoxLayout->addWidget(followLandShapeLabel);
+    generatedObjectGroupBoxLayout->addWidget(mFollowLandShapeFactor.back());
+
     generatedObjectGroupBox->setLayout(generatedObjectGroupBoxLayout);
     mGeneratedObjectsLayout->addWidget(generatedObjectGroupBox);
 }
@@ -199,6 +205,12 @@ void CSMWorld::ObjectProcGenTool::deleteGenerationObject()
         if ((toBeDeleted = mGeneratedObjectsLayout->takeAt(mGeneratedObjectsLayout->count() - 1)->widget()) != 0)
             delete toBeDeleted;
 
+        mZDisplacement.pop_back();
+        mRandomDisplacement.pop_back();
+        mRandomRotation.pop_back();
+        mRandomZRotationCheckBox.pop_back();
+        mFollowLandShapeFactor.pop_back();
+        mGeneratedObjectTerrainTexType.pop_back();
         mGeneratedObjectChanceSpinBoxes.pop_back();
         mGeneratedObjects.pop_back();
     }
@@ -253,9 +265,39 @@ void CSMWorld::ObjectProcGenTool::loadGenerationSettings()
             if (setting == "objectSpawnChance")
             {
                 mGeneratedObjectChanceSpinBoxes[objectCount]->setValue(boost::lexical_cast<double>(value));
-                ++objectCount;
             }
 
+            if (setting == "terrainTextureId")
+            {
+                int index = mGeneratedObjectTerrainTexType[objectCount]->findText(QString::fromStdString(value));
+                mGeneratedObjectTerrainTexType[objectCount]->setCurrentIndex(index);
+            }
+
+            if (setting == "randomZRotation")
+            {
+                mRandomZRotationCheckBox[objectCount]->setChecked(boost::lexical_cast<bool>(value));
+            }
+
+            if (setting == "randomXYRotation")
+            {
+                mRandomRotation[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
+            if (setting == "randomDisplacement")
+            {
+                mRandomDisplacement[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
+            if (setting == "zDisplacement")
+            {
+                mZDisplacement[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
+            if (setting == "followLandShapeFactor")
+            {
+                mFollowLandShapeFactor[objectCount]->setValue(boost::lexical_cast<double>(value));
+                ++objectCount;
+            }
         }
     }
     settingsFile.close();
@@ -268,8 +310,24 @@ void CSMWorld::ObjectProcGenTool::saveGenerationSettings()
     settingsFile << "# This file was saved in OpenCS, and holds settings for procedurally generated objects. \n";
     for(long unsigned int i = 0; i < mGeneratedObjects.size(); ++i)
     {
+        settingsFile << "# Id of object \n";
         settingsFile << "objectName = " << mGeneratedObjects[i]->currentText().toUtf8().constData() << "\n";
+        settingsFile << "# Spawn chance of object, float, min 0.0, max 1.0 \n";
         settingsFile << "objectSpawnChance = " << mGeneratedObjectChanceSpinBoxes[i]->value() << "\n";
+        settingsFile << "# Id of the suitable terrain texture \n";
+        settingsFile << "terrainTextureId = " << mGeneratedObjectTerrainTexType[i]->currentText().toUtf8().constData() << "\n";
+        settingsFile << "# Random Z rotation. Randomized for + and -, therefore the value here should be halved. \n";
+        settingsFile << "randomZRotation = " << mRandomZRotationCheckBox[i]->isChecked() << "\n";
+        settingsFile << "# Random X and Y rotation. Randomized for + and -, therefore the value here should be halved. \n";
+        settingsFile << "randomXYRotation = " << mRandomRotation[i]->value() << "\n";
+        settingsFile << "# Random displacement. Randomized for + and -, therefore the value here should be halved. \n";
+        settingsFile << "randomDisplacement = " << mRandomDisplacement[i]->value() << "\n";
+        settingsFile << "# Fixed Z displacement, used to push object into ground or vice versa. \n";
+        settingsFile << "zDisplacement = " << mZDisplacement[i]->value() << "\n";
+        settingsFile << "# Used to control object leaning towards downhill. Value 0.0 is vertical, value of 1.0 is normal to ground. \n";
+        settingsFile << "# Values above 1.0 are leaning more towards horizontal. \n";
+        settingsFile << "followLandShapeFactor = " << mFollowLandShapeFactor[i]->value() << "\n";
+        settingsFile << "\n";
     }
     settingsFile.close();
 }
@@ -278,10 +336,7 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
 {
     std::random_device rd;
     std::mt19937 mt(rd());
-    std::uniform_real_distribution<double> distChanceOfObject(0.0, 1.0);
-    std::uniform_real_distribution<double> distRot(-3.12 * mRandomZRotationCheckBox->isChecked(), 3.12 * mRandomZRotationCheckBox->isChecked());
-    std::uniform_real_distribution<double> distSmallRot(-mRandomRotation->value(), mRandomRotation->value());
-    std::uniform_int_distribution<int> distDisplacement(-mRandomDisplacement->value(), mRandomDisplacement->value());
+    std::uniform_real_distribution<double> distZeroToOne(0.0, 1.0);
 
     CSMWorld::IdTable& landTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
@@ -301,13 +356,17 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                 {
                     for(std::vector<int>::size_type objectCount = 0; objectCount != mGeneratedObjects.size(); objectCount++)
                     {
+                        std::uniform_real_distribution<double> distZRotation(-3.12 * mRandomZRotationCheckBox[objectCount]->isChecked(), 3.12 * mRandomZRotationCheckBox[objectCount]->isChecked());
+                        std::uniform_real_distribution<double> distXAndYRotation(-mRandomRotation[objectCount]->value(), mRandomRotation[objectCount]->value());
+                        std::uniform_int_distribution<int> distDisplacement(-mRandomDisplacement[objectCount]->value(), mRandomDisplacement[objectCount]->value());
                         std::size_t hashlocation = mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().find("#");
                         if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
-                            distChanceOfObject(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
+                            distZeroToOne(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
                                 placeObject(mGeneratedObjects[objectCount]->currentText(),
                                     cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
-                                    distSmallRot(mt), distSmallRot(mt), distRot(mt));
+                                    distXAndYRotation(mt), distXAndYRotation(mt), distZRotation(mt),
+                                    mFollowLandShapeFactor[objectCount]->value(), mZDisplacement[objectCount]->value());
                     }
                 }
             }
@@ -349,7 +408,7 @@ osg::Quat CSMWorld::ObjectProcGenTool::eulerToQuat(const osg::Vec3f& euler) cons
 }
 
 void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos, float yWorldPos,
-    float xRot, float yRot, float zRot)
+    float xRot, float yRot, float zRot, float followLandShapeFactor, float zDisplacement)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_References));
@@ -410,8 +469,8 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
     osg::Quat rotationX;
     osg::Quat rotationY;
 
-    rotationX = osg::Quat(-std::atan((xSlope / (cellSize / landSize)) * mFollowLandShapeFactor->value()), axisX);
-    rotationY = osg::Quat(std::atan((ySlope / (cellSize / landSize)) * mFollowLandShapeFactor->value()), axisY);
+    rotationX = osg::Quat(-std::atan((xSlope / (cellSize / landSize)) * followLandShapeFactor), axisX);
+    rotationY = osg::Quat(std::atan((ySlope / (cellSize / landSize)) * followLandShapeFactor), axisY);
 
     //Quat rotation code is a modified from CSVRender::InstanceMode::drag
     osg::Quat currentRot = eulerToQuat(osg::Vec3f(xRot, yRot, zRot));
@@ -436,7 +495,7 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionYPos), yWorldPos);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos + mZDisplacement->value());
+        CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos + zDisplacement);
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionXRot), xRot);
     createCommand->addValue (referencesTable.findColumnIndex (

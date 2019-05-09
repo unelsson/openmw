@@ -142,7 +142,7 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     generatedObjectGroupBox->setStyleSheet("QGroupBox#generatedObjectGroupBox {padding: 0px; margin: 0px;border: 0px;}");
     generatedObjectGroupBox->adjustSize();
 
-    mGeneratedObjects.push_back(new QComboBox(this));
+    mGeneratedObjects.emplace_back(new QComboBox(this));
     CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Referenceables));
     for (int j = 0; j < referenceablesTable.rowCount(); ++j)
@@ -152,15 +152,15 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
 
     QLabel* chanceLabel;
     chanceLabel = new QLabel(tr("%"));
-    mGeneratedObjectChanceSpinBoxes.push_back(new QDoubleSpinBox);
+    mGeneratedObjectChanceSpinBoxes.emplace_back(new QDoubleSpinBox);
     mGeneratedObjectChanceSpinBoxes.back()->setRange(0.f, 1.f);
     mGeneratedObjectChanceSpinBoxes.back()->setSingleStep(0.1f);
     mGeneratedObjectChanceSpinBoxes.back()->setValue(0.7f);
-    mGeneratedObjectChanceSpinBoxes.back()->setDecimals(3);
+    mGeneratedObjectChanceSpinBoxes.back()->setDecimals(5);
 
     QLabel* ltexLabel;
     ltexLabel = new QLabel(tr("Tex:"));
-    mGeneratedObjectTerrainTexType.push_back(new QComboBox);
+    mGeneratedObjectTerrainTexType.emplace_back(new QComboBox);
     CSMWorld::IdTable& ltexTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_LandTextures));
     for (int j = 0; j < ltexTable.rowCount(); ++j)
@@ -169,33 +169,45 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     }
 
     QLabel* followLandShapeLabel;
-    followLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));;
-    mFollowLandShapeFactor.push_back(new QDoubleSpinBox);
+    followLandShapeLabel = new QLabel(tr("Rotate to land shape factor:"));
+    mFollowLandShapeFactor.emplace_back(new QDoubleSpinBox);
     mFollowLandShapeFactor.back()->setDecimals(2);
     mFollowLandShapeFactor.back()->setRange(-3.00f, 3.00f); //1.0f makes object point to normal direction
     mFollowLandShapeFactor.back()->setValue(0.25f);
 
-    mRandomZRotationCheckBox.push_back(new QCheckBox("Random z-rotation", this));
+    mRandomZRotationCheckBox.emplace_back(new QCheckBox("Random z-rotation", this));
     mRandomZRotationCheckBox.back()->setChecked(true);
 
     QLabel* randomRotationLabel;
-    randomRotationLabel = new QLabel(tr("Random xy-rotation"));;
-    mRandomRotation.push_back(new QDoubleSpinBox);
+    randomRotationLabel = new QLabel(tr("Random xy-rotation"));
+    mRandomRotation.emplace_back(new QDoubleSpinBox);
     mRandomRotation.back()->setDecimals(2);
     mRandomRotation.back()->setRange(0.00f, 3.12f); //radians
     mRandomRotation.back()->setValue(0.08f);
 
     QLabel* randomDisplacementLabel;
-    randomDisplacementLabel = new QLabel(tr("Random displacement:"));;
-    mRandomDisplacement.push_back(new QSpinBox);
+    randomDisplacementLabel = new QLabel(tr("Random displacement:"));
+    mRandomDisplacement.emplace_back(new QSpinBox);
     mRandomDisplacement.back()->setRange(0, 99999999); //in worldspace units
     mRandomDisplacement.back()->setValue(500);
 
     QLabel* zDisplacementLabel;
-    zDisplacementLabel = new QLabel(tr("Z displacement:"));;
-    mZDisplacement.push_back(new QSpinBox);
+    zDisplacementLabel = new QLabel(tr("Z displacement:"));
+    mZDisplacement.emplace_back(new QSpinBox);
     mZDisplacement.back()->setRange(-99999999, 99999999); //in worldspace units
     mZDisplacement.back()->setValue(0);
+
+    QLabel* minZHeightLabel;
+    minZHeightLabel = new QLabel(tr("Min Z:"));
+    mMinZHeight.emplace_back(new QSpinBox);
+    mMinZHeight.back()->setRange(-99999999, 99999999);
+    mMinZHeight.back()->setValue(-100000);
+
+    QLabel* maxZHeightLabel;
+    maxZHeightLabel = new QLabel(tr("Max Z:"));
+    mMaxZHeight.emplace_back(new QSpinBox);
+    mMaxZHeight.back()->setRange(-99999999, 99999999);
+    mMaxZHeight.back()->setValue(100000);
 
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjects.back());
     generatedObjectGroupBoxLayout->addWidget(chanceLabel);
@@ -210,6 +222,10 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     generatedObjectGroupBoxLayout->addWidget(mRandomDisplacement.back());
     generatedObjectGroupBoxLayout->addWidget(zDisplacementLabel);
     generatedObjectGroupBoxLayout->addWidget(mZDisplacement.back());
+    generatedObjectGroupBoxLayout->addWidget(minZHeightLabel);
+    generatedObjectGroupBoxLayout->addWidget(mMinZHeight.back());
+    generatedObjectGroupBoxLayout->addWidget(maxZHeightLabel);
+    generatedObjectGroupBoxLayout->addWidget(mMaxZHeight.back());
     generatedObjectGroupBoxLayout->addWidget(followLandShapeLabel);
     generatedObjectGroupBoxLayout->addWidget(mFollowLandShapeFactor.back());
 
@@ -225,6 +241,8 @@ void CSMWorld::ObjectProcGenTool::deleteGenerationObject()
         if ((toBeDeleted = mGeneratedObjectsLayout->takeAt(mGeneratedObjectsLayout->count() - 1)->widget()) != 0)
             delete toBeDeleted;
 
+        mMaxZHeight.pop_back();
+        mMinZHeight.pop_back();
         mZDisplacement.pop_back();
         mRandomDisplacement.pop_back();
         mRandomRotation.pop_back();
@@ -274,6 +292,7 @@ void CSMWorld::ObjectProcGenTool::loadGenerationSettings()
             size_t valueBegin = settingEnd+1;
             std::string value = line.substr(valueBegin);
             boost::algorithm::trim(value);
+            bool newObject = false;
 
             if (setting == "objectName")
             {
@@ -313,11 +332,23 @@ void CSMWorld::ObjectProcGenTool::loadGenerationSettings()
                 mZDisplacement[objectCount]->setValue(boost::lexical_cast<double>(value));
             }
 
+            if (setting == "minZHeight")
+            {
+                mMinZHeight[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
+            if (setting == "maxZHeight")
+            {
+                mMaxZHeight[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
             if (setting == "followLandShapeFactor")
             {
                 mFollowLandShapeFactor[objectCount]->setValue(boost::lexical_cast<double>(value));
-                ++objectCount;
+                newObject = true;
             }
+
+            if (newObject) ++objectCount;
         }
     }
     settingsFile.close();
@@ -344,6 +375,10 @@ void CSMWorld::ObjectProcGenTool::saveGenerationSettings()
         settingsFile << "randomDisplacement = " << mRandomDisplacement[i]->value() << "\n";
         settingsFile << "# Fixed Z displacement, used to push object into ground or vice versa. \n";
         settingsFile << "zDisplacement = " << mZDisplacement[i]->value() << "\n";
+        settingsFile << "# Minimum Z-level that is allowed for generation, e.g. waterlevel (z = 0.0). \n";
+        settingsFile << "minZHeight = " << mMinZHeight[i]->value() << "\n";
+        settingsFile << "# Maximum Z-level that is allowed for generation, e.g. waterlevel (z = 0.0). \n";
+        settingsFile << "maxZHeight = " << mMaxZHeight[i]->value() << "\n";
         settingsFile << "# Used to control object leaning towards downhill. Value 0.0 is vertical, value of 1.0 is normal to ground. \n";
         settingsFile << "# Values above 1.0 are leaning more towards horizontal. \n";
         settingsFile << "followLandShapeFactor = " << mFollowLandShapeFactor[i]->value() << "\n";
@@ -370,23 +405,24 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
         {
             std::string cellId ("#" + std::to_string(cellX) + " " + std::to_string(cellY)); // should be CSVRender::TerrainSelection::generateId()
             CSMWorld::LandTexturesColumn::DataType landTexPointer = landTable.data(landTable.getModelIndex(cellId, textureColumn)).value<CSMWorld::LandTexturesColumn::DataType>();
-            for (int xInCell = 0; xInCell < landTextureSize; ++xInCell)
-            {
-                for (int yInCell = 0; yInCell < landTextureSize; ++yInCell)
+                for(std::vector<int>::size_type objectCount = 0; objectCount != mGeneratedObjects.size(); objectCount++)
                 {
-                    for(std::vector<int>::size_type objectCount = 0; objectCount != mGeneratedObjects.size(); objectCount++)
+                    std::uniform_real_distribution<double> distZRotation(-3.12 * mRandomZRotationCheckBox[objectCount]->isChecked(), 3.12 * mRandomZRotationCheckBox[objectCount]->isChecked());
+                    std::uniform_real_distribution<double> distXAndYRotation(-mRandomRotation[objectCount]->value(), mRandomRotation[objectCount]->value());
+                    std::uniform_int_distribution<int> distDisplacement(-mRandomDisplacement[objectCount]->value(), mRandomDisplacement[objectCount]->value());
+                    std::size_t hashlocation = mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().find("#");
+                    for (int xInCell = 0; xInCell < landTextureSize; ++xInCell)
                     {
-                        std::uniform_real_distribution<double> distZRotation(-3.12 * mRandomZRotationCheckBox[objectCount]->isChecked(), 3.12 * mRandomZRotationCheckBox[objectCount]->isChecked());
-                        std::uniform_real_distribution<double> distXAndYRotation(-mRandomRotation[objectCount]->value(), mRandomRotation[objectCount]->value());
-                        std::uniform_int_distribution<int> distDisplacement(-mRandomDisplacement[objectCount]->value(), mRandomDisplacement[objectCount]->value());
-                        std::size_t hashlocation = mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().find("#");
+                        for (int yInCell = 0; yInCell < landTextureSize; ++yInCell)
+                        {
                         if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
                             distZeroToOne(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
                                 placeObject(mGeneratedObjects[objectCount]->currentText(),
                                     cellSize * static_cast<float>((cellX * landTextureSize) + xInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     cellSize * static_cast<float>((cellY * landTextureSize) + yInCell) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     distXAndYRotation(mt), distXAndYRotation(mt), distZRotation(mt),
-                                    mFollowLandShapeFactor[objectCount]->value(), mZDisplacement[objectCount]->value());
+                                    mFollowLandShapeFactor[objectCount]->value(), mZDisplacement[objectCount]->value(),
+                                    mMinZHeight[objectCount]->value(), mMaxZHeight[objectCount]->value());
                     }
                 }
             }
@@ -428,7 +464,7 @@ osg::Quat CSMWorld::ObjectProcGenTool::eulerToQuat(const osg::Vec3f& euler) cons
 }
 
 void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos, float yWorldPos,
-    float xRot, float yRot, float zRot, float followLandShapeFactor, float zDisplacement)
+    float xRot, float yRot, float zRot, float followLandShapeFactor, float zDisplacement, int minZHeight, int maxZHeight)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_References));
@@ -454,6 +490,8 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
     int landshapeColumn = landTable.findColumnIndex(CSMWorld::Columns::ColumnId_LandHeightsIndex);
     const CSMWorld::LandHeightsColumn::DataType landPointer = landTable.data(landTable.getModelIndex(cellId, landshapeColumn)).value<CSMWorld::LandHeightsColumn::DataType>();
     float zWorldPos = landPointer[localY*landSize + localX];
+
+    if (zWorldPos < minZHeight || zWorldPos > maxZHeight ) return;
 
     //These are used for calculating slopes. Defaults to no slope (eg. in cell edge).
     float zWorldPosXPlus1 = zWorldPos;

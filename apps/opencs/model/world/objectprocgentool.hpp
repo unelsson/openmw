@@ -29,7 +29,7 @@ namespace CSMWorld
 
         private:
         void createInterface();
-        void placeObject(QString, float, float, float, float, float, float, float);
+        void placeObject(QString, float, float, float, float, float, float, float, int, int);
         osg::Vec3f quatToEuler(const osg::Quat& quat) const;
         osg::Quat eulerToQuat(const osg::Vec3f& euler) const;
 
@@ -63,6 +63,8 @@ namespace CSMWorld
         std::vector<QDoubleSpinBox*> mRandomRotation;
         std::vector<QSpinBox*> mRandomDisplacement;
         std::vector<QSpinBox*> mZDisplacement;
+        std::vector<QSpinBox*> mMinZHeight;
+        std::vector<QSpinBox*> mMaxZHeight;
 
         const int landSize {ESM::Land::LAND_SIZE};
 

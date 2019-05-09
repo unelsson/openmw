@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QScrollArea>
 #include <QGroupBox>
 #include <QUndoStack>
 #include <QPushButton>
@@ -90,7 +91,11 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellCoordinatesQHBoxLayout = new QHBoxLayout;
     mCellCoordinatesQVBoxLayoutA = new QVBoxLayout;
     mCellCoordinatesQVBoxLayoutB = new QVBoxLayout;
+
     mGeneratedObjectsLayout = new QVBoxLayout;
+    mGeneratedObjectsLayout->setSizeConstraint(QLayout::SetFixedSize);
+    mGeneratedObjectsLayout->setSpacing(0);
+    mGeneratedObjectsLayout->setContentsMargins(0, 0, 0, 0);
 
     mCellCoordinatesQVBoxLayoutA->addWidget(mCornerALabel);
     mCellCoordinatesQVBoxLayoutA->addWidget(mCellXSpinBoxCornerA);
@@ -101,10 +106,21 @@ void CSMWorld::ObjectProcGenTool::createInterface()
     mCellCoordinatesQHBoxLayout->addLayout(mCellCoordinatesQVBoxLayoutA);
     mCellCoordinatesQHBoxLayout->addLayout(mCellCoordinatesQVBoxLayoutB);
 
+    QGroupBox* generatedObjectsGroupBox; //layout holding all generation objects
+    generatedObjectsGroupBox = new QGroupBox;
+    generatedObjectsGroupBox->setObjectName("generatedObjectsGroupBox");
+    generatedObjectsGroupBox->setStyleSheet("QGroupBox#generatedObjectsGroupBox {margin: 0px;padding: 0px; border: 0px;}");
+    generatedObjectsGroupBox->setContentsMargins(0, 0, 0, 0);
+    generatedObjectsGroupBox->setLayout(mGeneratedObjectsLayout);
+
+    QScrollArea* scrollArea;
+    scrollArea = new QScrollArea;
+    scrollArea->setWidget(generatedObjectsGroupBox);
+
     createNewGenerationObject();
 
     mMainLayout->addLayout(mCellCoordinatesQHBoxLayout);
-    mMainLayout->addLayout(mGeneratedObjectsLayout);
+    mMainLayout->addWidget(scrollArea);
     mMainLayout->addLayout(deleteNewButtonsLayout);
     mMainLayout->addWidget(mLoadGenerationSettingsButton);
     mMainLayout->addWidget(mSaveGenerationSettingsButton);
@@ -119,8 +135,12 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     generatedObjectGroupBox = new QGroupBox;
     generatedObjectGroupBoxLayout = new QHBoxLayout;
 
+    generatedObjectGroupBoxLayout->setSpacing(0);
+    generatedObjectGroupBoxLayout->setContentsMargins(0, 0, 0, 0);
+
     generatedObjectGroupBox->setObjectName("generatedObjectGroupBox");
-    generatedObjectGroupBox->setStyleSheet("QGroupBox#generatedObjectGroupBox {border: 1px solid #000000;}");
+    generatedObjectGroupBox->setStyleSheet("QGroupBox#generatedObjectGroupBox {padding: 0px; margin: 0px;border: 0px;}");
+    generatedObjectGroupBox->adjustSize();
 
     mGeneratedObjects.push_back(new QComboBox(this));
     CSMWorld::IdTable& referenceablesTable = dynamic_cast<CSMWorld::IdTable&> (

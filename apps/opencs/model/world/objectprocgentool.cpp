@@ -367,9 +367,9 @@ void CSMWorld::ObjectProcGenTool::saveGenerationSettings()
         settingsFile << "objectSpawnChance = " << mGeneratedObjectChanceSpinBoxes[i]->value() << "\n";
         settingsFile << "# Id of the suitable terrain texture \n";
         settingsFile << "terrainTextureId = " << mGeneratedObjectTerrainTexType[i]->currentText().toUtf8().constData() << "\n";
-        settingsFile << "# Random Z rotation. Randomized for + and -, therefore the value here should be halved. \n";
+        settingsFile << "# Random Z rotation (in radians). Randomized for + and -, therefore the value here should be halved. \n";
         settingsFile << "randomZRotation = " << mRandomZRotationCheckBox[i]->isChecked() << "\n";
-        settingsFile << "# Random X and Y rotation. Randomized for + and -, therefore the value here should be halved. \n";
+        settingsFile << "# Random X and Y rotation (in radians). Randomized for + and -, therefore the value here should be halved. \n";
         settingsFile << "randomXYRotation = " << mRandomRotation[i]->value() << "\n";
         settingsFile << "# Random displacement. Randomized for + and -, therefore the value here should be halved. \n";
         settingsFile << "randomDisplacement = " << mRandomDisplacement[i]->value() << "\n";
@@ -555,11 +555,11 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_PositionZPos), zWorldPos + zDisplacement);
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionXRot), xRot);
+        CSMWorld::Columns::ColumnId_PositionXRot), osg::RadiansToDegrees(xRot));
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionYRot), yRot);
+        CSMWorld::Columns::ColumnId_PositionYRot), osg::RadiansToDegrees(yRot));
     createCommand->addValue (referencesTable.findColumnIndex (
-        CSMWorld::Columns::ColumnId_PositionZRot), zRot);
+        CSMWorld::Columns::ColumnId_PositionZRot), osg::RadiansToDegrees(zRot));
     createCommand->addValue (referencesTable.findColumnIndex (
         CSMWorld::Columns::ColumnId_ReferenceableId),
         objectId);

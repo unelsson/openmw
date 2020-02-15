@@ -5,6 +5,8 @@
 #include <QPoint>
 #include <QString>
 
+#include <osg/Math>
+
 #include "../../model/prefs/state.hpp"
 
 #include <osg/ComputeBoundsVisitor>

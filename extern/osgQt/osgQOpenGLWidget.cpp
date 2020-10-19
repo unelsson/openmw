@@ -41,6 +41,10 @@ OpenThreads::ReadWriteMutex* osgQOpenGLWidget::mutex()
     return &_osgMutex;
 }
 
+osg::GraphicsContext* osgQOpenGLWidget::getGraphicsContext()
+{
+    return m_renderer->getCamera()->getGraphicsContext();
+}
 
 void osgQOpenGLWidget::initializeGL()
 {

@@ -26,6 +26,11 @@ namespace osgViewer
     class Viewer;
 }
 
+namespace osg
+{
+    class GraphicsContext;
+}
+
 namespace osgQt
 {
 
@@ -54,6 +59,9 @@ public:
 
     //! get mutex
     virtual OpenThreads::ReadWriteMutex* mutex();
+
+    /** Get graphicsContext */
+    virtual osg::GraphicsContext* getGraphicsContext();
 
     QWidget* asWidget()
     {

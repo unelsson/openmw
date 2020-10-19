@@ -18,9 +18,7 @@
 #include <QInputEvent>
 #include <QPointer>
 
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
 #include <QWindow>
-#endif
 
 using namespace osgQt;
 
@@ -30,130 +28,7 @@ using namespace osgQt;
     #define GETDEVICEPIXELRATIO() devicePixelRatio()
 #endif
 
-GLWidget::GLWidget( QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f)
-: QGLWidget(parent, shareWidget, f), _gw( NULL )
-{
-    _devicePixelRatio = GETDEVICEPIXELRATIO();
-}
-
-GLWidget::GLWidget( QGLContext* context, QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f)
-: QGLWidget(context, parent, shareWidget, f), _gw( NULL )
-{
-    _devicePixelRatio = GETDEVICEPIXELRATIO();
-}
-
-GLWidget::GLWidget( const QGLFormat& format, QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f)
-: QGLWidget(format, parent, shareWidget, f), _gw( NULL )
-{
-    _devicePixelRatio = GETDEVICEPIXELRATIO();
-}
-
-GLWidget::~GLWidget()
-{
-    // close GraphicsWindowQt and remove the reference to us
-    if( _gw )
-    {
-        _gw->close();
-        _gw->_widget = NULL;
-        _gw = NULL;
-    }
-}
-
-void GLWidget::processDeferredEvents()
-{
-    QQueue<QEvent::Type> deferredEventQueueCopy;
-    {
-        QMutexLocker lock(&_deferredEventQueueMutex);
-        deferredEventQueueCopy = _deferredEventQueue;
-        _eventCompressor.clear();
-        _deferredEventQueue.clear();
-    }
-
-    while (!deferredEventQueueCopy.isEmpty())
-    {
-        QEvent event(deferredEventQueueCopy.dequeue());
-        QGLWidget::event(&event);
-    }
-}
-
-bool GLWidget::event( QEvent* event )
-{
-
-    // QEvent::Hide
-    //
-    // workaround "Qt-workaround" that does glFinish before hiding the widget
-    // (the Qt workaround was seen at least in Qt 4.6.3 and 4.7.0)
-    //
-    // Qt makes the context current, performs glFinish, and releases the context.
-    // This makes the problem in OSG multithreaded environment as the context
-    // is active in another thread, thus it can not be made current for the purpose
-    // of glFinish in this thread.
-
-    // QEvent::ParentChange
-    //
-    // Reparenting GLWidget may create a new underlying window and a new GL context.
-    // Qt will then call doneCurrent on the GL context about to be deleted. The thread
-    // where old GL context was current has no longer current context to render to and
-    // we cannot make new GL context current in this thread.
-
-    // We workaround above problems by deferring execution of problematic event requests.
-    // These events has to be enqueue and executed later in a main GUI thread (GUI operations
-    // outside the main thread are not allowed) just before makeCurrent is called from the
-    // right thread. The good place for doing that is right after swap in a swapBuffersImplementation.
-
-    if (event->type() == QEvent::Hide)
-    {
-        // enqueue only the last of QEvent::Hide and QEvent::Show
-        enqueueDeferredEvent(QEvent::Hide, QEvent::Show);
-        return true;
-    }
-    else if (event->type() == QEvent::Show)
-    {
-        // enqueue only the last of QEvent::Show or QEvent::Hide
-        enqueueDeferredEvent(QEvent::Show, QEvent::Hide);
-        return true;
-    }
-    else if (event->type() == QEvent::ParentChange)
-    {
-        // enqueue only the last QEvent::ParentChange
-        enqueueDeferredEvent(QEvent::ParentChange);
-        return true;
-    }
-
-    // perform regular event handling
-    return QGLWidget::event( event );
-}
-
-void GLWidget::resizeEvent( QResizeEvent* event )
-{
-    if (_gw == nullptr || !_gw->valid())
-        return;
-    const QSize& size = event->size();
-
-    int scaled_width = static_cast<int>(size.width()*_devicePixelRatio);
-    int scaled_height = static_cast<int>(size.height()*_devicePixelRatio);
-    _gw->resized( x(), y(), scaled_width,  scaled_height);
-    _gw->getEventQueue()->windowResize( x(), y(), scaled_width, scaled_height );
-    _gw->requestRedraw();
-}
-
-void GLWidget::moveEvent( QMoveEvent* event )
-{
-    if (_gw == nullptr || !_gw->valid())
-        return;
-    const QPoint& pos = event->pos();
-    int scaled_width = static_cast<int>(width()*_devicePixelRatio);
-    int scaled_height = static_cast<int>(height()*_devicePixelRatio);
-    _gw->resized( pos.x(), pos.y(), scaled_width,  scaled_height );
-    _gw->getEventQueue()->windowResize( pos.x(), pos.y(), scaled_width,  scaled_height );
-}
-
-void GLWidget::glDraw()
-{
-    _gw->requestRedraw();
-}
-
-GraphicsWindowQt::GraphicsWindowQt( osg::GraphicsContext::Traits* traits, QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f )
+GraphicsWindowQt::GraphicsWindowQt( osg::GraphicsContext::Traits* traits, QWidget* parent, const QOpenGLWidget* shareWidget, Qt::WindowFlags f )
 :   _realized(false)
 {
 
@@ -162,7 +37,7 @@ GraphicsWindowQt::GraphicsWindowQt( osg::GraphicsContext::Traits* traits, QWidge
     init( parent, shareWidget, f );
 }
 
-GraphicsWindowQt::GraphicsWindowQt( GLWidget* widget )
+GraphicsWindowQt::GraphicsWindowQt( QOpenGLWidget* widget )
 :   _realized(false)
 {
     _widget = widget;
@@ -174,12 +49,12 @@ GraphicsWindowQt::~GraphicsWindowQt()
 {
     close();
 
-    // remove reference from GLWidget
-    if ( _widget )
-        _widget->_gw = NULL;
+    // remove reference from QOpenGLWidget
+    /*if ( _widget )
+        _widget->_gw = NULL;*/
 }
 
-bool GraphicsWindowQt::init( QWidget* parent, const QGLWidget* shareWidget, Qt::WindowFlags f )
+bool GraphicsWindowQt::init( QWidget* parent, const QOpenGLWidget* shareWidget, Qt::WindowFlags f )
 {
     // update _widget and parent by WindowData
     WindowData* windowData = _traits.get() ? dynamic_cast<WindowData*>(_traits->inheritedWindowData.get()) : 0;
@@ -196,20 +71,16 @@ bool GraphicsWindowQt::init( QWidget* parent, const QGLWidget* shareWidget, Qt::
         if ( !shareWidget ) {
             GraphicsWindowQt* sharedContextQt = dynamic_cast<GraphicsWindowQt*>(_traits->sharedContext.get());
             if ( sharedContextQt )
-                shareWidget = sharedContextQt->getGLWidget();
+                shareWidget = sharedContextQt->getQOpenGLWidget();
         }
 
         // WindowFlags
         Qt::WindowFlags flags = f | Qt::Window | Qt::CustomizeWindowHint;
         if ( _traits->windowDecoration )
-            flags |= Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowSystemMenuHint
-#if (QT_VERSION_CHECK(4, 5, 0) <= QT_VERSION)
-                | Qt::WindowCloseButtonHint
-#endif
-                ;
+            flags |= Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowSystemMenuHint;
 
         // create widget
-        _widget = new GLWidget( traits2qglFormat( _traits.get() ), parent, shareWidget, flags );
+        _widget = new QOpenGLWidget(parent, flags);
     }
 
     // set widget name and position
@@ -223,9 +94,9 @@ bool GraphicsWindowQt::init( QWidget* parent, const QGLWidget* shareWidget, Qt::
     }
 
     // initialize widget properties
-    _widget->setAutoBufferSwap( false );
+    //_widget->setAutoBufferSwap( false );
     _widget->setMouseTracking( true );
-    _widget->setGraphicsWindow( this );
+    //_widget->setGraphicsWindow( this );
     useCursor( _traits->useCursor );
 
     // initialize State
@@ -249,9 +120,9 @@ bool GraphicsWindowQt::init( QWidget* parent, const QGLWidget* shareWidget, Qt::
     return true;
 }
 
-QGLFormat GraphicsWindowQt::traits2qglFormat( const osg::GraphicsContext::Traits* traits )
+QSurfaceFormat GraphicsWindowQt::traits2QSurfaceFormat( const osg::GraphicsContext::Traits* traits )
 {
-    QGLFormat format( QGLFormat::defaultFormat() );
+    QSurfaceFormat format( QSurfaceFormat::defaultFormat() );
 
     format.setAlphaBufferSize( traits->alpha );
     format.setRedBufferSize( traits->red );
@@ -259,42 +130,46 @@ QGLFormat GraphicsWindowQt::traits2qglFormat( const osg::GraphicsContext::Traits
     format.setBlueBufferSize( traits->blue );
     format.setDepthBufferSize( traits->depth );
     format.setStencilBufferSize( traits->stencil );
-    format.setSampleBuffers( traits->sampleBuffers );
+    //format.setSampleBuffers( traits->sampleBuffers );
     format.setSamples( traits->samples );
 
-    format.setAlpha( traits->alpha>0 );
-    format.setDepth( traits->depth>0 );
-    format.setStencil( traits->stencil>0 );
-    format.setDoubleBuffer( traits->doubleBuffer );
+    //format.setAlpha( traits->alpha>0 );
+    //format.setDepth( traits->depth>0 );
+    //format.setStencil( traits->stencil>0 );
+    //format.setDoubleBuffer( traits->doubleBuffer );
     format.setSwapInterval( traits->vsync ? 1 : 0 );
     format.setStereo( traits->quadBufferStereo ? 1 : 0 );
 
     return format;
 }
 
-void GraphicsWindowQt::qglFormat2traits( const QGLFormat& format, osg::GraphicsContext::Traits* traits )
+void GraphicsWindowQt::QSurfaceFormat2traits( const QSurfaceFormat& format, osg::GraphicsContext::Traits* traits )
 {
     traits->red = format.redBufferSize();
     traits->green = format.greenBufferSize();
     traits->blue = format.blueBufferSize();
-    traits->alpha = format.alpha() ? format.alphaBufferSize() : 0;
-    traits->depth = format.depth() ? format.depthBufferSize() : 0;
-    traits->stencil = format.stencil() ? format.stencilBufferSize() : 0;
+    traits->alpha = format.hasAlpha() ? format.alphaBufferSize() : 0;
+    //traits->depth = format.depthBufferSize() : 0;
+    //traits->stencil = format.stencilBufferSize() : 0;
 
-    traits->sampleBuffers = format.sampleBuffers() ? 1 : 0;
+    //not found in qt5.0, what was it for?
+    //traits->sampleBuffers = format.sampleBuffers() ? 1 : 0;
+
     traits->samples = format.samples();
 
     traits->quadBufferStereo = format.stereo();
-    traits->doubleBuffer = format.doubleBuffer();
+
+    //maybe related to swapBehavior() SurfaceFormat::SwapBehavior
+    //traits->doubleBuffer = format.doubleBuffer();
 
     traits->vsync = format.swapInterval() >= 1;
 }
 
-osg::GraphicsContext::Traits* GraphicsWindowQt::createTraits( const QGLWidget* widget )
+osg::GraphicsContext::Traits* GraphicsWindowQt::createTraits( const QOpenGLWidget* widget )
 {
     osg::GraphicsContext::Traits *traits = new osg::GraphicsContext::Traits;
 
-    qglFormat2traits( widget->format(), traits );
+    QSurfaceFormat2traits( widget->format(), traits );
 
     QRect r = widget->geometry();
     traits->x = r.x();
@@ -314,16 +189,16 @@ osg::GraphicsContext::Traits* GraphicsWindowQt::createTraits( const QGLWidget* w
     return traits;
 }
 
-bool GraphicsWindowQt::setWindowRectangleImplementation( int x, int y, int width, int height )
+/*bool GraphicsWindowQt::setWindowRectangleImplementation( int x, int y, int width, int height )
 {
     if ( _widget == NULL )
         return false;
 
     _widget->setGeometry( x, y, width, height );
     return true;
-}
+}*/
 
-void GraphicsWindowQt::getWindowRectangle( int& x, int& y, int& width, int& height )
+/*void GraphicsWindowQt::getWindowRectangle( int& x, int& y, int& width, int& height )
 {
     if ( _widget )
     {
@@ -333,9 +208,9 @@ void GraphicsWindowQt::getWindowRectangle( int& x, int& y, int& width, int& heig
         width = geom.width();
         height = geom.height();
     }
-}
+}*/
 
-bool GraphicsWindowQt::setWindowDecorationImplementation( bool windowDecoration )
+/*bool GraphicsWindowQt::setWindowDecorationImplementation( bool windowDecoration )
 {
     Qt::WindowFlags flags = Qt::Window|Qt::CustomizeWindowHint;//|Qt::WindowStaysOnTopHint;
     if ( windowDecoration )
@@ -350,43 +225,43 @@ bool GraphicsWindowQt::setWindowDecorationImplementation( bool windowDecoration 
     }
 
     return false;
-}
+}*/
 
-bool GraphicsWindowQt::getWindowDecoration() const
+/*bool GraphicsWindowQt::getWindowDecoration() const
 {
     return _traits->windowDecoration;
-}
+}*/
 
-void GraphicsWindowQt::grabFocus()
+/*void GraphicsWindowQt::grabFocus()
 {
     if ( _widget )
         _widget->setFocus( Qt::ActiveWindowFocusReason );
-}
+}*/
 
-void GraphicsWindowQt::grabFocusIfPointerInWindow()
+/*void GraphicsWindowQt::grabFocusIfPointerInWindow()
 {
     if ( _widget->underMouse() )
         _widget->setFocus( Qt::ActiveWindowFocusReason );
-}
+}*/
 
-void GraphicsWindowQt::raiseWindow()
+/*void GraphicsWindowQt::raiseWindow()
 {
     if ( _widget )
         _widget->raise();
-}
+}*/
 
-void GraphicsWindowQt::setWindowName( const std::string& name )
+/*void GraphicsWindowQt::setWindowName( const std::string& name )
 {
     if ( _widget )
         _widget->setWindowTitle( name.c_str() );
-}
+}*/
 
-std::string GraphicsWindowQt::getWindowName()
+/*std::string GraphicsWindowQt::getWindowName()
 {
     return _widget ? _widget->windowTitle().toStdString() : "";
-}
+}*/
 
-void GraphicsWindowQt::useCursor( bool cursorOn )
+/*void GraphicsWindowQt::useCursor( bool cursorOn )
 {
     if ( _widget )
     {
@@ -394,9 +269,9 @@ void GraphicsWindowQt::useCursor( bool cursorOn )
         if ( !cursorOn ) _widget->setCursor( Qt::BlankCursor );
         else _widget->setCursor( _currentCursor );
     }
-}
+}*/
 
-void GraphicsWindowQt::setCursor( MouseCursor cursor )
+/*void GraphicsWindowQt::setCursor( MouseCursor cursor )
 {
     if ( cursor==InheritCursor && _widget )
     {
@@ -427,14 +302,14 @@ void GraphicsWindowQt::setCursor( MouseCursor cursor )
     default: break;
     };
     if ( _widget ) _widget->setCursor( _currentCursor );
-}
+}*/
 
-bool GraphicsWindowQt::valid() const
+/*bool GraphicsWindowQt::valid() const
 {
     return _widget && _widget->isValid();
-}
+}*/
 
-bool GraphicsWindowQt::realizeImplementation()
+/*bool GraphicsWindowQt::realizeImplementation()
 {
     // save the current context
     // note: this will save only Qt-based contexts
@@ -475,21 +350,21 @@ bool GraphicsWindowQt::realizeImplementation()
         const_cast< QGLContext* >( savedContext )->makeCurrent();
 
     return true;
-}
+}*/
 
-bool GraphicsWindowQt::isRealizedImplementation() const
+/*bool GraphicsWindowQt::isRealizedImplementation() const
 {
     return _realized;
-}
+}*/
 
-void GraphicsWindowQt::closeImplementation()
+/*void GraphicsWindowQt::closeImplementation()
 {
     if ( _widget )
         _widget->close();
     _realized = false;
-}
+}*/
 
-void GraphicsWindowQt::runOperations()
+/*void GraphicsWindowQt::runOperations()
 {
     // While in graphics thread this is last chance to do something useful before
     // graphics thread will execute its operations.
@@ -516,34 +391,7 @@ bool GraphicsWindowQt::releaseContextImplementation()
 {
     _widget->doneCurrent();
     return true;
-}
-
-void GraphicsWindowQt::swapBuffersImplementation()
-{
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
-    // QOpenGLContext complains if we swap on an non-exposed QWindow
-    if (!_widget || !_widget->windowHandle()->isExposed())
-        return;
-#endif
-    // FIXME: the processDeferredEvents should really be executed in a GUI (main) thread context but
-    // I couln't find any reliable way to do this. For now, lets hope non of *GUI thread only operations* will
-    // be executed in a QGLWidget::event handler. On the other hand, calling GUI only operations in the
-    // QGLWidget event handler is an indication of a Qt bug.
-    if (_widget->getNumDeferredEvents() > 0)
-        _widget->processDeferredEvents();
-
-    // We need to call makeCurrent here to restore our previously current context
-    // which may be changed by the processDeferredEvents function.
-    _widget->makeCurrent();
-    _widget->swapBuffers();
-}
-
-void GraphicsWindowQt::requestWarpPointer( float x, float y )
-{
-    if ( _widget )
-        QCursor::setPos( _widget->mapToGlobal(QPoint((int)x,(int)y)) );
-}
-
+}*/
 
 class QtWindowingSystem : public osg::GraphicsContext::WindowingSystemInterface
 {
@@ -619,4 +467,3 @@ private:
     QtWindowingSystem( const QtWindowingSystem& );
     QtWindowingSystem& operator=( const QtWindowingSystem& );
 };
-

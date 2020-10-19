@@ -3,6 +3,7 @@
 
 #include <osgViewer/Viewer>
 #include <osg/GL>
+#include <osg/GraphicsContext>
 
 #include <QApplication>
 #include <QKeyEvent>
@@ -34,6 +35,10 @@ OpenThreads::ReadWriteMutex* osgQOpenGLWindow::mutex()
     return &_osgMutex;
 }
 
+osg::GraphicsContext* osgQOpenGLWindow::getGraphicsContext()
+{
+    return m_renderer->getCamera()->getGraphicsContext();
+}
 
 void osgQOpenGLWindow::initializeGL()
 {

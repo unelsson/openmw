@@ -19,11 +19,6 @@ else()
    set(USE_QT TRUE)
 endif()
 
-if (USE_QT)
-    set(DESIRED_QT_VERSION 4 CACHE STRING "The QT version OpenMW should use (4 or 5)")
-    set_property(CACHE DESIRED_QT_VERSION PROPERTY STRINGS 4 5)
-endif()
-
 # set the minimum required version across the board
 cmake_minimum_required(VERSION 3.1.0)
 
@@ -151,19 +146,11 @@ endif()
 find_package(OpenGL REQUIRED)
 
 if (USE_QT)
-    message(STATUS "Using Qt${DESIRED_QT_VERSION}")
-
-    if (DESIRED_QT_VERSION MATCHES 4)
-        find_package(Qt4 REQUIRED COMPONENTS QtCore QtGui QtNetwork QtOpenGL)
-    else()
-        find_package(Qt5Widgets REQUIRED)
-        find_package(Qt5Core REQUIRED)
-        find_package(Qt5Network REQUIRED)
-        find_package(Qt5OpenGL REQUIRED)
-        find_package(Qt5Gui REQUIRED)
-    # Instruct CMake to run moc automatically when needed.
-    #set(CMAKE_AUTOMOC ON)
-    endif()
+    find_package(Qt5Widgets REQUIRED)
+    find_package(Qt5Core REQUIRED)
+    find_package(Qt5Network REQUIRED)
+    find_package(Qt5OpenGL REQUIRED)
+    find_package(Qt5Gui REQUIRED)
 endif()
 
 # Sound setup
@@ -922,4 +909,3 @@ if (DOXYGEN_FOUND)
         WORKING_DIRECTORY ${OpenMW_BINARY_DIR}
         COMMENT "Generating documentation for the github-pages at ${DOXYGEN_PAGES_OUTPUT_DIR}" VERBATIM)
 endif ()
-

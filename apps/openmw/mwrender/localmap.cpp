@@ -18,13 +18,14 @@
 #include <components/settings/settings.hpp>
 #include <components/sceneutil/visitor.hpp>
 #include <components/sceneutil/shadow.hpp>
-#include <components/sceneutil/vismask.hpp>
 #include <components/files/memorystream.hpp>
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
 
 #include "../mwworld/cellstore.hpp"
+
+#include "vismask.hpp"
 
 namespace
 {
@@ -38,10 +39,10 @@ namespace
         {
         }
 
-        virtual void operator()(osg::Node* node, osg::NodeVisitor*)
+        void operator()(osg::Node* node, osg::NodeVisitor*) override
         {
             if (mRendered)
-                node->setNodeMask(SceneUtil::Mask_Disabled);
+                node->setNodeMask(0);
 
             if (!mRendered)
             {
@@ -73,7 +74,7 @@ LocalMap::LocalMap(osg::Group* root)
     : mRoot(root)
     , mMapResolution(Settings::Manager::getInt("local map resolution", "Map"))
     , mMapWorldSize(Constants::CellSizeInUnits)
-    , mCellDistance(Settings::Manager::getInt("local map cell distance", "Map"))
+    , mCellDistance(Constants::CellGridRadius)
     , mAngle(0.f)
     , mInterior(false)
 {
@@ -117,7 +118,7 @@ void LocalMap::saveFogOfWar(MWWorld::CellStore* cell)
         if (segment.mFogOfWarImage && segment.mHasFogState)
         {
             std::unique_ptr<ESM::FogState> fog (new ESM::FogState());
-            fog->mFogTextures.push_back(ESM::FogTexture());
+            fog->mFogTextures.emplace_back();
 
             segment.saveFogOfWar(fog->mFogTextures.back());
 
@@ -149,7 +150,7 @@ void LocalMap::saveFogOfWar(MWWorld::CellStore* cell)
             {
                 const MapSegment& segment = mSegments[std::make_pair(x,y)];
 
-                fog->mFogTextures.push_back(ESM::FogTexture());
+                fog->mFogTextures.emplace_back();
 
                 // saving even if !segment.mHasFogState so we don't mess up the segmenting
                 // plus, older openmw versions can't deal with empty images
@@ -167,18 +168,21 @@ void LocalMap::saveFogOfWar(MWWorld::CellStore* cell)
 osg::ref_ptr<osg::Camera> LocalMap::createOrthographicCamera(float x, float y, float width, float height, const osg::Vec3d& upVector, float zmin, float zmax)
 {
     osg::ref_ptr<osg::Camera> camera (new osg::Camera);
-
     camera->setProjectionMatrixAsOrtho(-width/2, width/2, -height/2, height/2, 5, (zmax-zmin) + 10);
     camera->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
     camera->setViewMatrixAsLookAt(osg::Vec3d(x, y, zmax + 5), osg::Vec3d(x, y, zmin), upVector);
-    camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
+    camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT);
     camera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT, osg::Camera::PIXEL_BUFFER_RTT);
     camera->setClearColor(osg::Vec4(0.f, 0.f, 0.f, 1.f));
     camera->setClearMask(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     camera->setRenderOrder(osg::Camera::PRE_RENDER);
 
-    camera->setCullMask(SceneUtil::Mask_Scene | SceneUtil::Mask_SimpleWater | SceneUtil::Mask_Terrain | SceneUtil::Mask_Object | SceneUtil::Mask_Static);
-    camera->setNodeMask(SceneUtil::Mask_RenderToTexture);
+    camera->setCullMask(Mask_Scene | Mask_SimpleWater | Mask_Terrain | Mask_Object | Mask_Static);
+    camera->setNodeMask(Mask_RenderToTexture);
+
+    // Disable small feature culling, it's not going to be reliable for this camera
+    osg::Camera::CullingMode cullingMode = (osg::Camera::DEFAULT_CULLING|osg::Camera::FAR_PLANE_CULLING) & ~(osg::CullStack::SMALL_FEATURE_CULLING);
+    camera->setCullingMode(cullingMode);
 
     osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet;
     stateset->setAttribute(new osg::PolygonMode(osg::PolygonMode::FRONT_AND_BACK, osg::PolygonMode::FILL), osg::StateAttribute::OVERRIDE);
@@ -355,11 +359,6 @@ void LocalMap::requestExteriorMap(const MWWorld::CellStore* cell)
 
     osg::ref_ptr<osg::Camera> camera = createOrthographicCamera(x*mMapWorldSize + mMapWorldSize/2.f, y*mMapWorldSize + mMapWorldSize/2.f, mMapWorldSize, mMapWorldSize,
                                                                 osg::Vec3d(0,1,0), zmin, zmax);
-    camera->getOrCreateUserDataContainer()->addDescription("NoTerrainLod");
-    std::ostringstream stream;
-    stream << x << " " << y;
-    camera->getOrCreateUserDataContainer()->addDescription(stream.str());
-
     setupRenderToTexture(camera, cell->getCell()->getGridX(), cell->getCell()->getGridY());
 
     MapSegment& segment = mSegments[std::make_pair(cell->getCell()->getGridX(), cell->getCell()->getGridY())];
@@ -375,7 +374,7 @@ void LocalMap::requestExteriorMap(const MWWorld::CellStore* cell)
 void LocalMap::requestInteriorMap(const MWWorld::CellStore* cell)
 {
     osg::ComputeBoundsVisitor computeBoundsVisitor;
-    computeBoundsVisitor.setTraversalMask(SceneUtil::Mask_Scene | SceneUtil::Mask_Terrain | SceneUtil::Mask_Object | SceneUtil::Mask_Static);
+    computeBoundsVisitor.setTraversalMask(Mask_Scene | Mask_Terrain | Mask_Object | Mask_Static);
     mSceneRoot->accept(computeBoundsVisitor);
 
     osg::BoundingBox bounds = computeBoundsVisitor.getBoundingBox();
@@ -692,12 +691,10 @@ void LocalMap::MapSegment::loadFogOfWar(const ESM::FogTexture &esm)
         return;
     }
 
-    // TODO: deprecate tga and use raw data instead
-
-    osgDB::ReaderWriter* readerwriter = osgDB::Registry::instance()->getReaderWriterForExtension("tga");
+    osgDB::ReaderWriter* readerwriter = osgDB::Registry::instance()->getReaderWriterForExtension("png");
     if (!readerwriter)
     {
-        Log(Debug::Error) << "Error: Unable to load fog, can't find a tga ReaderWriter" ;
+        Log(Debug::Error) << "Error: Unable to load fog, can't find a png ReaderWriter" ;
         return;
     }
 
@@ -726,10 +723,10 @@ void LocalMap::MapSegment::saveFogOfWar(ESM::FogTexture &fog) const
 
     std::ostringstream ostream;
 
-    osgDB::ReaderWriter* readerwriter = osgDB::Registry::instance()->getReaderWriterForExtension("tga");
+    osgDB::ReaderWriter* readerwriter = osgDB::Registry::instance()->getReaderWriterForExtension("png");
     if (!readerwriter)
     {
-        Log(Debug::Error) << "Error: Unable to write fog, can't find a tga ReaderWriter";
+        Log(Debug::Error) << "Error: Unable to write fog, can't find a png ReaderWriter";
         return;
     }
 

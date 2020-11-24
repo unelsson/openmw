@@ -36,7 +36,7 @@ const vec3 SUN_EXT = vec3(0.45, 0.55, 0.68);       //sunlight extinction
 
 const float SPEC_HARDNESS = 256.0;                 // specular highlights hardness
 
-const float BUMP_SUPPRESS_DEPTH = 300.0;           // at what water depth bumpmap will be supressed for reflections and refractions (prevents artifacts at shores)
+const float BUMP_SUPPRESS_DEPTH = 300.0;           // at what water depth bumpmap will be suppressed for reflections and refractions (prevents artifacts at shores)
 
 const vec2 WIND_DIR = vec2(0.5f, -0.8f);
 const float WIND_SPEED = 0.2f;
@@ -124,7 +124,7 @@ vec2 normalCoords(vec2 uv, float scale, float speed, float time, float timer1, f
 
 varying vec3 screenCoordsPassthrough;
 varying vec4 position;
-varying float depthPassthrough;
+varying float linearDepth;
 
 uniform sampler2D normalMap;
 
@@ -160,7 +160,7 @@ void main(void)
     vec2 UV = worldPos.xy / (8192.0*5.0) * 3.0;
     UV.y *= -1.0;
 
-    float shadow = unshadowedLightRatio(depthPassthrough);
+    float shadow = unshadowedLightRatio(linearDepth);
 
     vec2 screenCoords = screenCoordsPassthrough.xy / screenCoordsPassthrough.z;
     screenCoords.y = (1.0-screenCoords.y);
@@ -203,11 +203,20 @@ void main(void)
     float ior = (cameraPos.z>0.0)?(1.333/1.0):(1.0/1.333); // air to water; water to air
     float fresnel = clamp(fresnel_dielectric(vVec, normal, ior), 0.0, 1.0);
 
+    float radialise = 1.0;
+
+#if @radialFog
+    float radialDepth = distance(position.xyz, cameraPos);
+    // TODO: Figure out how to properly radialise refraction depth and thus underwater fog
+    // while avoiding oddities when the water plane is close to the clipping plane
+    // radialise = radialDepth / linearDepth;
+#endif
+
     vec2 screenCoordsOffset = normal.xy * REFL_BUMP;
 #if REFRACTION
-    float depthSample = linearizeDepth(texture2D(refractionDepthMap,screenCoords).x);
-    float depthSampleDistorted = linearizeDepth(texture2D(refractionDepthMap,screenCoords-screenCoordsOffset).x);
-    float surfaceDepth = linearizeDepth(gl_FragCoord.z);
+    float depthSample = linearizeDepth(texture2D(refractionDepthMap,screenCoords).x) * radialise;
+    float depthSampleDistorted = linearizeDepth(texture2D(refractionDepthMap,screenCoords-screenCoordsOffset).x) * radialise;
+    float surfaceDepth = linearizeDepth(gl_FragCoord.z) * radialise;
     float realWaterDepth = depthSample - surfaceDepth;  // undistorted water depth in view direction, independent of frustum
     screenCoordsOffset *= clamp(realWaterDepth / BUMP_SUPPRESS_DEPTH,0,1);
 #endif
@@ -246,7 +255,11 @@ void main(void)
 #endif
 
     // fog
-    float fogValue = clamp((depthPassthrough - gl_Fog.start) * gl_Fog.scale, 0.0, 1.0);
+#if @radialFog
+    float fogValue = clamp((radialDepth - gl_Fog.start) * gl_Fog.scale, 0.0, 1.0);
+#else
+    float fogValue = clamp((linearDepth - gl_Fog.start) * gl_Fog.scale, 0.0, 1.0);
+#endif
     gl_FragData[0].xyz = mix(gl_FragData[0].xyz,  gl_Fog.color.xyz,  fogValue);
 
     applyShadowDebugOverlay();

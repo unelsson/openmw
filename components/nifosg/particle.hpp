@@ -32,12 +32,15 @@ namespace NifOsg
 
         META_Object(NifOsg, ParticleSystem)
 
-        virtual osgParticle::Particle* createParticle(const osgParticle::Particle *ptemplate);
+        osgParticle::Particle* createParticle(const osgParticle::Particle *ptemplate) override;
 
         void setQuota(int quota);
 
+        void drawImplementation(osg::RenderInfo& renderInfo) const override;
+
     private:
         int mQuota;
+        osg::ref_ptr<osg::Vec3Array> mNormalArray;
     };
 
     // HACK: Particle doesn't allow setting the initial age, but we need this for loading the particle system state
@@ -67,7 +70,7 @@ namespace NifOsg
 
         META_Object(NifOsg, InverseWorldMatrix)
 
-        void operator()(osg::Node* node, osg::NodeVisitor* nv);
+        void operator()(osg::Node* node, osg::NodeVisitor* nv) override;
     };
 
     class ParticleShooter : public osgParticle::Shooter
@@ -82,7 +85,7 @@ namespace NifOsg
 
         META_Object(NifOsg, ParticleShooter)
 
-        virtual void shoot(osgParticle::Particle* particle) const;
+        void shoot(osgParticle::Particle* particle) const override;
 
     private:
         float mMinSpeed;
@@ -104,8 +107,8 @@ namespace NifOsg
 
         META_Object(NifOsg, PlanarCollider)
 
-        virtual void beginOperate(osgParticle::Program* program);
-        virtual void operate(osgParticle::Particle* particle, double dt);
+        void beginOperate(osgParticle::Program* program) override;
+        void operate(osgParticle::Particle* particle, double dt) override;
 
     private:
         float mBounceFactor;
@@ -122,8 +125,8 @@ namespace NifOsg
 
         META_Object(NifOsg, SphericalCollider)
 
-        virtual void beginOperate(osgParticle::Program* program);
-        virtual void operate(osgParticle::Particle* particle, double dt);
+        void beginOperate(osgParticle::Program* program) override;
+        void operate(osgParticle::Particle* particle, double dt) override;
     private:
         float mBounceFactor;
         osg::BoundingSphere mSphere;
@@ -141,8 +144,8 @@ namespace NifOsg
 
         META_Object(NifOsg, GrowFadeAffector)
 
-        virtual void beginOperate(osgParticle::Program* program);
-        virtual void operate(osgParticle::Particle* particle, double dt);
+        void beginOperate(osgParticle::Program* program) override;
+        void operate(osgParticle::Particle* particle, double dt) override;
 
     private:
         float mGrowTime;
@@ -162,7 +165,7 @@ namespace NifOsg
 
         META_Object(NifOsg, ParticleColorAffector)
 
-        virtual void operate(osgParticle::Particle* particle, double dt);
+        void operate(osgParticle::Particle* particle, double dt) override;
 
     private:
         Vec4Interpolator mData;
@@ -179,8 +182,8 @@ namespace NifOsg
 
         META_Object(NifOsg, GravityAffector)
 
-        virtual void operate(osgParticle::Particle* particle, double dt);
-        virtual void beginOperate(osgParticle::Program *);
+        void operate(osgParticle::Particle* particle, double dt) override;
+        void beginOperate(osgParticle::Program *) override ;
 
     private:
         float mForce;
@@ -201,21 +204,21 @@ namespace NifOsg
     class FindGroupByRecIndex : public osg::NodeVisitor
     {
     public:
-        FindGroupByRecIndex(int recIndex);
+        FindGroupByRecIndex(unsigned int recIndex);
 
-        virtual void apply(osg::Node &node);
+        void apply(osg::Node &node) override;
 
         // Technically not required as the default implementation would trickle down to apply(Node&) anyway,
         // but we'll shortcut instead to avoid the chain of virtual function calls
-        virtual void apply(osg::MatrixTransform& node);
-        virtual void apply(osg::Geometry& node);
+        void apply(osg::MatrixTransform& node) override;
+        void apply(osg::Geometry& node) override;
 
         void applyNode(osg::Node& searchNode);
 
         osg::Group* mFound;
         osg::NodePath mFoundPath;
     private:
-        int mRecIndex;
+        unsigned int mRecIndex;
     };
 
     // Subclass emitter to support randomly choosing one of the child node's transforms for the emit position of new particles.
@@ -228,7 +231,7 @@ namespace NifOsg
 
         META_Object(NifOsg, Emitter)
 
-        virtual void emitParticles(double dt);
+        void emitParticles(double dt) override;
 
         void setShooter(osgParticle::Shooter* shooter);
         void setPlacer(osgParticle::Placer* placer);

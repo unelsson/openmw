@@ -51,7 +51,7 @@ add_component_dir (shader
 add_component_dir (sceneutil
     clone attach visitor util statesetupdater controller skeleton riggeometry morphgeometry lightcontroller
     lightmanager lightutil positionattitudetransform workqueue unrefqueue pathgridutil waterutil writescene serialize optimizer
-    actorutil detourdebugdraw navmesh agentpath shadow mwshadowtechnique vismask
+    actorutil detourdebugdraw navmesh agentpath shadow mwshadowtechnique recastmesh shadowsbin
     )
 
 add_component_dir (nif
@@ -59,7 +59,7 @@ add_component_dir (nif
     )
 
 add_component_dir (nifosg
-    nifloader controller particle userdata
+    nifloader controller particle matrixtransform
     )
 
 add_component_dir (nifbullet
@@ -86,11 +86,11 @@ add_component_dir (esmterrain
     )
 
 add_component_dir (misc
-    gcd constants utf8stream stringops resourcehelpers rng messageformatparser weakcache
+    constants utf8stream stringops resourcehelpers rng messageformatparser weakcache
     )
 
 add_component_dir (debug
-    debugging debuglog
+    debugging debuglog gldebug
     )
 
 IF(NOT WIN32 AND NOT APPLE)
@@ -111,7 +111,7 @@ add_component_dir (compiler
 
 add_component_dir (interpreter
     context controlopcodes genericopcodes installopcodes interpreter localopcodes mathopcodes
-    miscopcodes opcodes runtime scriptopcodes spatialopcodes types defines
+    miscopcodes opcodes runtime types defines
     )
 
 add_component_dir (translation
@@ -139,7 +139,7 @@ add_component_dir (fontloader
     )
 
 add_component_dir (sdlutil
-    sdlgraphicswindow imagetosurface sdlinputwrapper sdlvideowrapper OISCompat events sdlcursormanager
+    sdlgraphicswindow imagetosurface sdlinputwrapper sdlvideowrapper events sdlcursormanager
     )
 
 add_component_dir (version
@@ -196,14 +196,12 @@ if (USE_QT)
         processinvoker
         )
 
-    if (DESIRED_QT_VERSION MATCHES 4)
-        include(${QT_USE_FILE})
-        QT4_WRAP_UI(ESM_UI_HDR ${ESM_UI})
-        QT4_WRAP_CPP(MOC_SRCS ${COMPONENT_MOC_FILES})
-    else()
-        QT5_WRAP_UI(ESM_UI_HDR ${ESM_UI})
-        QT5_WRAP_CPP(MOC_SRCS ${COMPONENT_MOC_FILES})
-    endif()
+    add_component_dir (misc
+        helpviewer
+        )
+
+    QT5_WRAP_UI(ESM_UI_HDR ${ESM_UI})
+    QT5_WRAP_CPP(MOC_SRCS ${COMPONENT_MOC_FILES})
 endif()
 
 if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -212,7 +210,7 @@ if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
 endif ()
 
-include_directories(${Bullet_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${BULLET_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
 
 add_library(components STATIC ${COMPONENT_FILES} ${MOC_SRCS} ${ESM_UI_HDR})
 
@@ -231,11 +229,11 @@ target_link_libraries(components
     ${OSGGA_LIBRARIES}
     ${OSGSHADOW_LIBRARIES}
     ${OSGANIMATION_LIBRARIES}
-    ${Bullet_LIBRARIES}
+    ${BULLET_LIBRARIES}
     ${SDL2_LIBRARIES}
     ${OPENGL_gl_LIBRARY}
     ${MyGUI_LIBRARIES}
-    ${BSAOPTHASH_LIBRARIES}
+    LZ4::LZ4
     RecastNavigation::DebugUtils
     RecastNavigation::Detour
     RecastNavigation::Recast
@@ -248,13 +246,7 @@ if (WIN32)
 endif()
 
 if (USE_QT)
-    if (DESIRED_QT_VERSION MATCHES 4)
-        target_link_libraries(components
-        ${QT_QTCORE_LIBRARY}
-        ${QT_QTGUI_LIBRARY})
-    else()
-        target_link_libraries(components Qt5::Widgets Qt5::Core)
-    endif()
+    target_link_libraries(components Qt5::Widgets Qt5::Core)
 endif()
 
 if (GIT_CHECKOUT)
@@ -263,9 +255,6 @@ endif (GIT_CHECKOUT)
 
 if (WIN32)
     target_link_libraries(components shlwapi)
-    if(MINGW)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DNOGDI")
-    endif(MINGW)
 endif()
 
 # Fix for not visible pthreads functions for linker with glibc 2.15
@@ -281,3 +270,7 @@ endif()
 
 # Make the variable accessible for other subdirectories
 set(COMPONENT_FILES ${COMPONENT_FILES} PARENT_SCOPE)
+
+if (BULLET_USE_DOUBLES)
+    target_compile_definitions(components PUBLIC BT_USE_DOUBLE_PRECISION)
+endif()

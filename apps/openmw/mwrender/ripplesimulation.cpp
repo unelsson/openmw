@@ -16,7 +16,8 @@
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/fallback/fallback.hpp>
-#include <components/sceneutil/vismask.hpp>
+
+#include "vismask.hpp"
 
 #include "../mwbase/world.hpp"
 #include "../mwbase/environment.hpp"
@@ -103,7 +104,7 @@ RippleSimulation::RippleSimulation(osg::Group *parent, Resource::ResourceSystem*
     mParticleNode->setName("Ripple Root");
     mParticleNode->addChild(updater);
     mParticleNode->addChild(mParticleSystem);
-    mParticleNode->setNodeMask(SceneUtil::Mask_Water);
+    mParticleNode->setNodeMask(Mask_Water);
 
     createWaterRippleStateSet(resourceSystem, mParticleNode);
 
@@ -199,6 +200,7 @@ void RippleSimulation::emitRipple(const osg::Vec3f &pos)
 {
     if (std::abs(pos.z() - mParticleNode->getPosition().z()) < 20)
     {
+        osgParticle::ParticleSystem::ScopedWriteLock lock(*mParticleSystem->getReadWriteMutex());
         osgParticle::Particle* p = mParticleSystem->createParticle(nullptr);
         p->setPosition(osg::Vec3f(pos.x(), pos.y(), 0.f));
         p->setAngle(osg::Vec3f(0,0, Misc::Rng::rollProbability() * osg::PI * 2 - osg::PI));

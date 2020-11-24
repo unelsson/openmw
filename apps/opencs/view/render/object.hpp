@@ -54,7 +54,7 @@ namespace CSVRender
 
             Object* mObject;
 
-            virtual QString getToolTip (bool hideBasics) const;
+            QString getToolTip (bool hideBasics) const override;
     };
 
     class ObjectMarkerTag : public ObjectTag
@@ -145,6 +145,12 @@ namespace CSVRender
             void setSelected(bool selected);
 
             bool getSelected() const;
+
+            /// Get object node with GUI graphics
+            osg::ref_ptr<osg::Group> getRootNode();
+
+            /// Get object node without GUI graphics
+            osg::ref_ptr<osg::Group> getBaseNode();
 
             /// \return Did this call result in a modification of the visual representation of
             /// this object?

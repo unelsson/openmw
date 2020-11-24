@@ -159,7 +159,7 @@ namespace MWGui
         for (int i=0; ids[i]; ++i)
             if (ids[i]==id)
             {
-                setText (id, std::to_string(value.getModified()));
+                setText (id, std::to_string(static_cast<int>(value.getModified())));
 
                 MyGUI::TextBox* box;
                 getWidget(box, id);
@@ -620,10 +620,10 @@ namespace MWGui
 
                         text += "\n";
 
-                        if (rankData.mSkill1 > 0)
-                            text += "\n#{sNeedOneSkill} " + MyGUI::utility::toString(rankData.mSkill1);
-                        if (rankData.mSkill2 > 0)
-                            text += " #{sand} #{sNeedTwoSkills} " + MyGUI::utility::toString(rankData.mSkill2);
+                        if (rankData.mPrimarySkill > 0)
+                            text += "\n#{sNeedOneSkill} " + MyGUI::utility::toString(rankData.mPrimarySkill);
+                        if (rankData.mFavouredSkill > 0)
+                            text += " #{sand} #{sNeedTwoSkills} " + MyGUI::utility::toString(rankData.mFavouredSkill);
                     }
                 }
 

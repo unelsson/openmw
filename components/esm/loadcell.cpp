@@ -21,12 +21,12 @@ namespace
 
         // If we have an index value that does not make sense, assume that it was an addition
         // by the present plugin (but a faulty one)
-        if (local && local <= reader.getGameFiles().size())
+        if (local && local <= reader.getParentFileIndices().size())
         {
             // If the most significant 8 bits are used, then this reference already exists.
             // In this case, do not spawn a new reference, but overwrite the old one.
             refNum.mIndex &= 0x00ffffff; // delete old plugin ID
-            refNum.mContentFile = reader.getGameFiles()[local-1].index;
+            refNum.mContentFile = reader.getParentFileIndices()[local-1];
         }
         else
         {
@@ -210,13 +210,15 @@ namespace ESM
     std::string Cell::getDescription() const
     {
         if (mData.mFlags & Interior)
-        {
             return mName;
-        }
-        else
-        {
-            return std::to_string(mData.mX) + ", " + std::to_string(mData.mY);
-        }
+
+        std::string cellGrid = "(" + std::to_string(mData.mX) + ", " + std::to_string(mData.mY) + ")";
+        if (!mName.empty())
+            return mName + ' ' + cellGrid;
+        // FIXME: should use sDefaultCellname GMST instead, but it's not available in this scope
+        std::string region = !mRegion.empty() ? mRegion : "Wilderness";
+
+        return region + ' ' + cellGrid;
     }
 
     bool Cell::getNextRef(ESMReader &esm, CellRef &ref, bool &isDeleted, bool ignoreMoves, MovedCellRef *mref)

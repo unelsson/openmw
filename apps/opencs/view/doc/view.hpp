@@ -64,7 +64,7 @@ namespace CSVDoc
 
         private:
 
-            void closeEvent (QCloseEvent *event);
+            void closeEvent (QCloseEvent *event) override;
 
             QAction* createMenuEntry(CSMWorld::UniversalId::Type type, QMenu* menu, const char* shortcutName);
             QAction* createMenuEntry(const std::string& title, const std::string& iconName, QMenu* menu, const char* shortcutName);
@@ -168,6 +168,10 @@ namespace CSVDoc
             void save();
 
             void exit();
+
+            static void openHelp();
+
+            static void tutorial();
 
             void infoAbout();
 

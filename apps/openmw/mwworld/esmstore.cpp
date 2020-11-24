@@ -9,6 +9,47 @@
 #include <components/esm/esmreader.hpp>
 #include <components/esm/esmwriter.hpp>
 
+#include "../mwmechanics/spelllist.hpp"
+
+namespace
+{
+    void readRefs(const ESM::Cell& cell, std::map<ESM::RefNum, std::string>& refs, std::vector<ESM::ESMReader>& readers)
+    {
+        for (size_t i = 0; i < cell.mContextList.size(); i++)
+        {
+            size_t index = cell.mContextList[i].index;
+            if (readers.size() <= index)
+                readers.resize(index + 1);
+            cell.restore(readers[index], i);
+            ESM::CellRef ref;
+            ref.mRefNum.mContentFile = ESM::RefNum::RefNum_NoContentFile;
+            bool deleted = false;
+            while(cell.getNextRef(readers[index], ref, deleted))
+            {
+                if(deleted)
+                    refs.erase(ref.mRefNum);
+                else if (std::find(cell.mMovedRefs.begin(), cell.mMovedRefs.end(), ref.mRefNum) == cell.mMovedRefs.end())
+                {
+                    Misc::StringUtils::lowerCaseInPlace(ref.mRefID);
+                    refs[ref.mRefNum] = ref.mRefID;
+                }
+            }
+        }
+        for(const auto& it : cell.mLeasedRefs)
+        {
+            bool deleted = it.second;
+            if(deleted)
+                refs.erase(it.first.mRefNum);
+            else
+            {
+                ESM::CellRef ref = it.first;
+                Misc::StringUtils::lowerCaseInPlace(ref.mRefID);
+                refs[ref.mRefNum] = ref.mRefID;
+            }
+        }
+    }
+}
+
 namespace MWWorld
 {
 
@@ -45,7 +86,7 @@ void ESMStore::load(ESM::ESMReader &esm, Loading::Listener* listener)
     const std::vector<ESM::Header::MasterData> &masters = esm.getGameFiles();
     std::vector<ESM::ESMReader> *allPlugins = esm.getGlobalReaderList();
     for (size_t j = 0; j < masters.size(); j++) {
-        ESM::Header::MasterData &mast = const_cast<ESM::Header::MasterData&>(masters[j]);
+        const ESM::Header::MasterData &mast = masters[j];
         std::string fname = mast.name;
         int index = ~0;
         for (int i = 0; i < esm.getIndex(); i++) {
@@ -63,7 +104,7 @@ void ESMStore::load(ESM::ESMReader &esm, Loading::Listener* listener)
                 + ", but it has not been loaded yet. Please check your load order.";
             esm.fail(fstring);
         }
-        mast.index = index;
+        esm.addParentFileIndex(index);
     }
 
     // Loop through all records
@@ -136,13 +177,43 @@ void ESMStore::setUp(bool validateRecords)
                 mIds[*record] = storeIt->first;
         }
     }
+
+    if (mStaticIds.empty())
+        mStaticIds = mIds;
+
     mSkills.setUp();
     mMagicEffects.setUp();
     mAttributes.setUp();
     mDialogs.setUp();
 
     if (validateRecords)
+    {
         validate();
+        countRecords();
+    }
+}
+
+void ESMStore::countRecords()
+{
+    if(!mRefCount.empty())
+        return;
+    std::map<ESM::RefNum, std::string> refs;
+    std::vector<ESM::ESMReader> readers;
+    for(auto it = mCells.intBegin(); it != mCells.intEnd(); it++)
+        readRefs(*it, refs, readers);
+    for(auto it = mCells.extBegin(); it != mCells.extEnd(); it++)
+        readRefs(*it, refs, readers);
+    for(const auto& pair : refs)
+        mRefCount[pair.second]++;
+}
+
+int ESMStore::getRefCount(const std::string& id) const
+{
+    const std::string lowerId = Misc::StringUtils::lowerCase(id);
+    auto it = mRefCount.find(lowerId);
+    if(it == mRefCount.end())
+        return 0;
+    return it->second;
 }
 
 void ESMStore::validate()
@@ -273,7 +344,9 @@ void ESMStore::validate()
             +mSpells.getDynamicSize()
             +mWeapons.getDynamicSize()
             +mCreatureLists.getDynamicSize()
-            +mItemLists.getDynamicSize();
+            +mItemLists.getDynamicSize()
+            +mCreatures.getDynamicSize()
+            +mContainers.getDynamicSize();
     }
 
     void ESMStore::write (ESM::ESMWriter& writer, Loading::Listener& progress) const
@@ -295,6 +368,8 @@ void ESMStore::validate()
         mNpcs.write (writer, progress);
         mItemLists.write (writer, progress);
         mCreatureLists.write (writer, progress);
+        mCreatures.write (writer, progress);
+        mContainers.write (writer, progress);
     }
 
     bool ESMStore::readRecord (ESM::ESMReader& reader, uint32_t type)
@@ -312,24 +387,9 @@ void ESMStore::validate()
             case ESM::REC_NPC_:
             case ESM::REC_LEVI:
             case ESM::REC_LEVC:
-
-                {
-                    mStores[type]->read (reader);
-                }
-
-                if (type==ESM::REC_NPC_)
-                {
-                    // NPC record will always be last and we know that there can be only one
-                    // dynamic NPC record (player) -> We are done here with dynamic record loading
-                    setUp();
-
-                    const ESM::NPC *player = mNpcs.find ("player");
-
-                    if (!mRaces.find (player->mRace) ||
-                        !mClasses.find (player->mClass))
-                        throw std::runtime_error ("Invalid player record (race or class unavailable");
-                }
-
+            case ESM::REC_CREA:
+            case ESM::REC_CONT:
+                mStores[type]->read (reader);
                 return true;
 
             case ESM::REC_DYNA:
@@ -343,4 +403,34 @@ void ESMStore::validate()
         }
     }
 
+    void ESMStore::checkPlayer()
+    {
+        setUp();
+
+        const ESM::NPC *player = mNpcs.find ("player");
+
+        if (!mRaces.find (player->mRace) ||
+            !mClasses.find (player->mClass))
+            throw std::runtime_error ("Invalid player record (race or class unavailable");
+    }
+
+    std::pair<std::shared_ptr<MWMechanics::SpellList>, bool> ESMStore::getSpellList(const std::string& originalId) const
+    {
+        const std::string id = Misc::StringUtils::lowerCase(originalId);
+        auto result = mSpellListCache.find(id);
+        std::shared_ptr<MWMechanics::SpellList> ptr;
+        if (result != mSpellListCache.end())
+            ptr = result->second.lock();
+        if (!ptr)
+        {
+            int type = find(id);
+            ptr = std::make_shared<MWMechanics::SpellList>(id, type);
+            if (result != mSpellListCache.end())
+                result->second = ptr;
+            else
+                mSpellListCache.insert({id, ptr});
+            return {ptr, false};
+        }
+        return {ptr, true};
+    }
 } // end namespace

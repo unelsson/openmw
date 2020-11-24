@@ -142,6 +142,12 @@ class NiRotatingParticlesData;
 class NiAutoNormalParticlesData;
 class NiPalette;
 struct NiParticleModifier;
+struct NiLinesData;
+struct NiBoolData;
+struct NiSkinPartition;
+struct NiFloatInterpolator;
+struct NiPoint3Interpolator;
+struct NiTransformInterpolator;
 
 using NodePtr = RecordPtrT<Node>;
 using ExtraPtr = RecordPtrT<Extra>;
@@ -158,17 +164,24 @@ using NiColorDataPtr = RecordPtrT<NiColorData>;
 using NiKeyframeDataPtr = RecordPtrT<NiKeyframeData>;
 using NiTriShapeDataPtr = RecordPtrT<NiTriShapeData>;
 using NiTriStripsDataPtr = RecordPtrT<NiTriStripsData>;
+using NiLinesDataPtr = RecordPtrT<NiLinesData>;
 using NiSkinInstancePtr = RecordPtrT<NiSkinInstance>;
 using NiSourceTexturePtr = RecordPtrT<NiSourceTexture>;
 using NiRotatingParticlesDataPtr = RecordPtrT<NiRotatingParticlesData>;
 using NiAutoNormalParticlesDataPtr = RecordPtrT<NiAutoNormalParticlesData>;
 using NiPalettePtr = RecordPtrT<NiPalette>;
 using NiParticleModifierPtr = RecordPtrT<NiParticleModifier>;
+using NiBoolDataPtr = RecordPtrT<NiBoolData>;
+using NiSkinPartitionPtr = RecordPtrT<NiSkinPartition>;
+using NiFloatInterpolatorPtr = RecordPtrT<NiFloatInterpolator>;
+using NiPoint3InterpolatorPtr = RecordPtrT<NiPoint3Interpolator>;
+using NiTransformInterpolatorPtr = RecordPtrT<NiTransformInterpolator>;
 
 using NodeList = RecordListT<Node>;
 using PropertyList = RecordListT<Property>;
 using ExtraList = RecordListT<Extra>;
 using NiSourceTextureList = RecordListT<NiSourceTexture>;
+using NiFloatInterpolatorList = RecordListT<NiFloatInterpolator>;
 
 } // Namespace
 #endif

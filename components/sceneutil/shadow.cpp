@@ -2,7 +2,7 @@
 
 #include <osgShadow/ShadowedScene>
 
-#include <components/sceneutil/vismask.hpp>
+#include <components/misc/stringops.hpp>
 #include <components/settings/settings.hpp>
 
 namespace SceneUtil
@@ -22,7 +22,7 @@ namespace SceneUtil
         mShadowTechnique->enableShadows();
 
         mShadowSettings->setLightNum(0);
-        mShadowSettings->setReceivesShadowTraversalMask(SceneUtil::Mask_Default);
+        mShadowSettings->setReceivesShadowTraversalMask(~0u);
 
         int numberOfShadowMapsPerLight = Settings::Manager::getInt("number of shadow maps", "Shadows");
         numberOfShadowMapsPerLight = std::max(1, std::min(numberOfShadowMapsPerLight, 8));
@@ -39,8 +39,12 @@ namespace SceneUtil
         }
 
         mShadowSettings->setMinimumShadowMapNearFarRatio(Settings::Manager::getFloat("minimum lispsm near far ratio", "Shadows"));
-        if (Settings::Manager::getBool("compute tight scene bounds", "Shadows"))
+
+        std::string computeSceneBounds = Settings::Manager::getString("compute scene bounds", "Shadows");
+        if (Misc::StringUtils::lowerCase(computeSceneBounds) == "primitives")
             mShadowSettings->setComputeNearFarModeOverride(osg::CullSettings::COMPUTE_NEAR_FAR_USING_PRIMITIVES);
+        else if (Misc::StringUtils::lowerCase(computeSceneBounds) == "bounds")
+            mShadowSettings->setComputeNearFarModeOverride(osg::CullSettings::COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES);
 
         int mapres = Settings::Manager::getInt("shadow map resolution", "Shadows");
         mShadowSettings->setTextureSize(osg::Vec2s(mapres, mapres));
@@ -68,6 +72,9 @@ namespace SceneUtil
 
     void ShadowManager::disableShadowsForStateSet(osg::ref_ptr<osg::StateSet> stateset)
     {
+        if (!Settings::Manager::getBool("enable shadows", "Shadows"))
+            return;
+
         int numberOfShadowMapsPerLight = Settings::Manager::getInt("number of shadow maps", "Shadows");
         numberOfShadowMapsPerLight = std::max(1, std::min(numberOfShadowMapsPerLight, 8));
 
@@ -96,6 +103,7 @@ namespace SceneUtil
 
         mShadowedScene->addChild(sceneRoot);
         rootNode->addChild(mShadowedScene);
+        mShadowedScene->setNodeMask(sceneRoot->getNodeMask());
 
         mShadowSettings = mShadowedScene->getShadowSettings();
         setupShadowSettings();
@@ -163,7 +171,7 @@ namespace SceneUtil
         if (Settings::Manager::getBool("enable indoor shadows", "Shadows"))
             mShadowSettings->setCastsShadowTraversalMask(mIndoorShadowCastingMask);
         else
-            mShadowTechnique->disableShadows();
+            mShadowTechnique->disableShadows(true);
     }
 
     void ShadowManager::enableOutdoorMode()

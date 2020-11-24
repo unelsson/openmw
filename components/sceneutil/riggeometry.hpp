@@ -23,7 +23,7 @@ namespace SceneUtil
         META_Object(SceneUtil, RigGeometry)
 
         // Currently empty as this is difficult to implement. Technically we would need to compile both internal geometries in separate frames but this method is only called once. Alternatively we could compile just the static parts of the model.
-        virtual void compileGLObjects(osg::RenderInfo& renderInfo) const {}
+        void compileGLObjects(osg::RenderInfo& renderInfo) const override {}
 
         struct BoneInfluence
         {
@@ -44,24 +44,24 @@ namespace SceneUtil
         /// @note The source geometry will not be modified.
         void setSourceGeometry(osg::ref_ptr<osg::Geometry> sourceGeom);
 
-        osg::ref_ptr<osg::Geometry> getSourceGeometry();
+        osg::ref_ptr<osg::Geometry> getSourceGeometry() const;
 
-        virtual void accept(osg::NodeVisitor &nv);
-        virtual bool supports(const osg::PrimitiveFunctor&) const { return true; }
-        virtual void accept(osg::PrimitiveFunctor&) const;
+        void accept(osg::NodeVisitor &nv) override;
+        bool supports(const osg::PrimitiveFunctor&) const override{ return true; }
+        void accept(osg::PrimitiveFunctor&) const override;
 
         struct CopyBoundingBoxCallback : osg::Drawable::ComputeBoundingBoxCallback
         {
             osg::BoundingBox boundingBox;
 
-            virtual osg::BoundingBox computeBound(const osg::Drawable&) const override { return boundingBox; }
+            osg::BoundingBox computeBound(const osg::Drawable&) const override { return boundingBox; }
         };
 
         struct CopyBoundingSphereCallback : osg::Node::ComputeBoundingSphereCallback
         {
             osg::BoundingSphere boundingSphere;
 
-            virtual osg::BoundingSphere computeBound(const osg::Node&) const override { return boundingSphere; }
+            osg::BoundingSphere computeBound(const osg::Node&) const override { return boundingSphere; }
         };
 
     private:

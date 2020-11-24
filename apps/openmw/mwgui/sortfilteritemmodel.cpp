@@ -23,24 +23,26 @@
 #include "../mwworld/nullaction.hpp"
 #include "../mwworld/esmstore.hpp"
 
+#include "../mwmechanics/alchemy.hpp"
+
 namespace
 {
     bool compareType(const std::string& type1, const std::string& type2)
     {
         // this defines the sorting order of types. types that are first in the vector appear before other types.
         std::vector<std::string> mapping;
-        mapping.push_back( typeid(ESM::Weapon).name() );
-        mapping.push_back( typeid(ESM::Armor).name() );
-        mapping.push_back( typeid(ESM::Clothing).name() );
-        mapping.push_back( typeid(ESM::Potion).name() );
-        mapping.push_back( typeid(ESM::Ingredient).name() );
-        mapping.push_back( typeid(ESM::Apparatus).name() );
-        mapping.push_back( typeid(ESM::Book).name() );
-        mapping.push_back( typeid(ESM::Light).name() );
-        mapping.push_back( typeid(ESM::Miscellaneous).name() );
-        mapping.push_back( typeid(ESM::Lockpick).name() );
-        mapping.push_back( typeid(ESM::Repair).name() );
-        mapping.push_back( typeid(ESM::Probe).name() );
+        mapping.emplace_back(typeid(ESM::Weapon).name() );
+        mapping.emplace_back(typeid(ESM::Armor).name() );
+        mapping.emplace_back(typeid(ESM::Clothing).name() );
+        mapping.emplace_back(typeid(ESM::Potion).name() );
+        mapping.emplace_back(typeid(ESM::Ingredient).name() );
+        mapping.emplace_back(typeid(ESM::Apparatus).name() );
+        mapping.emplace_back(typeid(ESM::Book).name() );
+        mapping.emplace_back(typeid(ESM::Light).name() );
+        mapping.emplace_back(typeid(ESM::Miscellaneous).name() );
+        mapping.emplace_back(typeid(ESM::Lockpick).name() );
+        mapping.emplace_back(typeid(ESM::Repair).name() );
+        mapping.emplace_back(typeid(ESM::Probe).name() );
 
         assert( std::find(mapping.begin(), mapping.end(), type1) != mapping.end() );
         assert( std::find(mapping.begin(), mapping.end(), type2) != mapping.end() );
@@ -67,8 +69,8 @@ namespace
                 return compareType(leftName, rightName);
 
             // compare items by name
-            leftName = Misc::StringUtils::lowerCase(left.mBase.getClass().getName(left.mBase));
-            rightName = Misc::StringUtils::lowerCase(right.mBase.getClass().getName(right.mBase));
+            leftName = Misc::StringUtils::lowerCaseUtf8(left.mBase.getClass().getName(left.mBase));
+            rightName = Misc::StringUtils::lowerCaseUtf8(right.mBase.getClass().getName(right.mBase));
 
             result = leftName.compare(rightName);
             if (result != 0)
@@ -151,6 +153,8 @@ namespace MWGui
         : mCategory(Category_All)
         , mFilter(0)
         , mSortByType(true)
+        , mNameFilter("")
+        , mEffectFilter("")
     {
         mSourceModel = sourceModel;
     }
@@ -162,7 +166,7 @@ namespace MWGui
 
     void SortFilterItemModel::addDragItem (const MWWorld::Ptr& dragItem, size_t count)
     {
-        mDragItems.push_back(std::make_pair(dragItem, count));
+        mDragItems.emplace_back(dragItem, count);
     }
 
     void SortFilterItemModel::clearDragItems()
@@ -199,8 +203,39 @@ namespace MWGui
         if (!(category & mCategory))
             return false;
 
-        if ((mFilter & Filter_OnlyIngredients) && base.getTypeName() != typeid(ESM::Ingredient).name())
-            return false;
+        if (mFilter & Filter_OnlyIngredients)
+        {
+            if (base.getTypeName() != typeid(ESM::Ingredient).name())
+                return false;
+
+            if (!mNameFilter.empty() && !mEffectFilter.empty())
+                throw std::logic_error("name and magic effect filter are mutually exclusive");
+
+            if (!mNameFilter.empty())
+            {
+                const auto itemName = Misc::StringUtils::lowerCaseUtf8(base.getClass().getName(base));
+                return itemName.find(mNameFilter) != std::string::npos;
+            }
+
+            if (!mEffectFilter.empty())
+            {
+                MWWorld::Ptr player = MWBase::Environment::get().getWorld ()->getPlayerPtr();
+                const auto alchemySkill = player.getClass().getSkill(player, ESM::Skill::Alchemy);
+
+                const auto effects = MWMechanics::Alchemy::effectsDescription(base, alchemySkill);
+
+                for (const auto& effect : effects)
+                {
+                    const auto ciEffect = Misc::StringUtils::lowerCaseUtf8(effect);
+
+                    if (ciEffect.find(mEffectFilter) != std::string::npos)
+                        return true;
+                }
+                return false;
+            }
+            return true;
+        }
+
         if ((mFilter & Filter_OnlyEnchanted) && !(item.mFlags & ItemStack::Flag_Enchanted))
             return false;
         if ((mFilter & Filter_OnlyChargedSoulstones) && (base.getTypeName() != typeid(ESM::Miscellaneous).name()
@@ -250,7 +285,7 @@ namespace MWGui
                 return false;
         }
 
-        std::string compare = Misc::StringUtils::lowerCase(item.mBase.getClass().getName(item.mBase));
+        std::string compare = Misc::StringUtils::lowerCaseUtf8(item.mBase.getClass().getName(item.mBase));
         if(compare.find(mNameFilter) == std::string::npos)
             return false;
 
@@ -283,7 +318,12 @@ namespace MWGui
 
     void SortFilterItemModel::setNameFilter (const std::string& filter)
     {
-        mNameFilter = Misc::StringUtils::lowerCase(filter);
+        mNameFilter = Misc::StringUtils::lowerCaseUtf8(filter);
+    }
+
+    void SortFilterItemModel::setEffectFilter (const std::string& filter)
+    {
+        mEffectFilter = Misc::StringUtils::lowerCaseUtf8(filter);
     }
 
     void SortFilterItemModel::update()

@@ -1,5 +1,8 @@
 #include "scenewidget.hpp"
 
+#include <chrono>
+#include <thread>
+
 #include <QEvent>
 #include <QResizeEvent>
 #include <QTimer>
@@ -21,7 +24,6 @@
 #include <components/resource/scenemanager.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/sceneutil/lightmanager.hpp>
-#include <components/sceneutil/vismask.hpp>
 
 #include "../widget/scenetoolmode.hpp"
 
@@ -30,6 +32,7 @@
 #include "../../model/prefs/shortcuteventhandler.hpp"
 
 #include "lighting.hpp"
+#include "mask.hpp"
 #include "cameracontroller.hpp"
 
 namespace CSVRender
@@ -89,7 +92,7 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
 
     SceneUtil::LightManager* lightMgr = new SceneUtil::LightManager;
     lightMgr->setStartLight(1);
-    lightMgr->setLightingMask(SceneUtil::Mask_Lighting);
+    lightMgr->setLightingMask(Mask_Lighting);
     mRootNode = lightMgr;
 
     mView->getCamera()->getOrCreateStateSet()->setMode(GL_NORMALIZE, osg::StateAttribute::ON);
@@ -105,8 +108,6 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
 
     // Add ability to signal osg to show its statistics for debugging purposes
     mView->addEventHandler(new osgViewer::StatsHandler);
-
-    mView->getCamera()->setCullMask(~(SceneUtil::Mask_UpdateVisitor));
 
     viewer.addView(mView);
     viewer.setDone(false);
@@ -140,7 +141,7 @@ void RenderWidget::flagAsModified()
 
 void RenderWidget::setVisibilityMask(int mask)
 {
-    mView->getCamera()->setCullMask(mask | SceneUtil::Mask_ParticleSystem | SceneUtil::Mask_Lighting);
+    mView->getCamera()->setCullMask(mask | Mask_ParticleSystem | Mask_Lighting);
 }
 
 osg::Camera *RenderWidget::getCamera()
@@ -163,14 +164,9 @@ void RenderWidget::toggleRenderStats()
 CompositeViewer::CompositeViewer()
     : mSimulationTime(0.0)
 {
-#if QT_VERSION >= 0x050000
-    // Qt5 is currently crashing and reporting "Cannot make QOpenGLContext current in a different thread" when the viewer is run multi-threaded, this is regression from Qt4
-    osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::ViewerBase::SingleThreaded;
-#else
-    osgViewer::ViewerBase::ThreadingModel threadingModel = osgViewer::ViewerBase::DrawThreadPerContext;
-#endif
-
-    setThreadingModel(threadingModel);
+    // TODO: Upgrade osgQt to support osgViewer::ViewerBase::DrawThreadPerContext
+    // https://gitlab.com/OpenMW/openmw/-/issues/5481
+    setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
 
 #if OSG_VERSION_GREATER_OR_EQUAL(3,5,5)
     setUseConfigureAffinity(false);
@@ -209,7 +205,7 @@ void CompositeViewer::update()
     double minFrameTime = _runMaxFrameRate > 0.0 ? 1.0 / _runMaxFrameRate : 0.0;
     if (dt < minFrameTime)
     {
-        OpenThreads::Thread::microSleep(1000*1000*(minFrameTime-dt));
+        std::this_thread::sleep_for(std::chrono::duration<double>(minFrameTime - dt));
     }
 }
 
@@ -230,7 +226,7 @@ SceneWidget::SceneWidget(std::shared_ptr<Resource::ResourceSystem> resourceSyste
     mOrbitCamControl = new OrbitCameraController(this);
     mCurrentCamControl = mFreeCamControl;
 
-    mOrbitCamControl->setPickingMask(SceneUtil::Mask_EditorReference | SceneUtil::Mask_Terrain);
+    mOrbitCamControl->setPickingMask(Mask_Reference | Mask_Terrain);
 
     mOrbitCamControl->setConstRoll( CSMPrefs::get()["3D Scene Input"]["navi-orbit-const-roll"].isTrue() );
 
@@ -239,7 +235,7 @@ SceneWidget::SceneWidget(std::shared_ptr<Resource::ResourceSystem> resourceSyste
 
     setLighting(&mLightingDay);
 
-    mResourceSystem->getSceneManager()->setParticleSystemMask(SceneUtil::Mask_ParticleSystem);
+    mResourceSystem->getSceneManager()->setParticleSystemMask(Mask_ParticleSystem);
 
     // Recieve mouse move event even if mouse button is not pressed
     setMouseTracking(true);
@@ -357,7 +353,7 @@ void SceneWidget::mouseMoveEvent (QMouseEvent *event)
 
 void SceneWidget::wheelEvent(QWheelEvent *event)
 {
-    mCurrentCamControl->handleMouseScrollEvent(event->delta());
+    mCurrentCamControl->handleMouseScrollEvent(event->angleDelta().y());
 }
 
 void SceneWidget::update(double dt)
@@ -368,7 +364,7 @@ void SceneWidget::update(double dt)
     }
     else
     {
-        mCurrentCamControl->setup(mRootNode, SceneUtil::Mask_EditorReference | SceneUtil::Mask_Terrain, CameraController::WorldUp);
+        mCurrentCamControl->setup(mRootNode, Mask_Reference | Mask_Terrain, CameraController::WorldUp);
         mCamPositionSet = true;
     }
 }

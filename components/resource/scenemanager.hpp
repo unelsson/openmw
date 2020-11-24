@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include <osg/ref_ptr>
 #include <osg/Node>
@@ -50,7 +51,7 @@ namespace Resource
         Shader::ShaderManager& getShaderManager();
 
         /// Re-create shaders for this node, need to call this if texture stages or vertex color mode have changed.
-        void recreateShaders(osg::ref_ptr<osg::Node> node);
+        void recreateShaders(osg::ref_ptr<osg::Node> node, const std::string& shaderPrefix = "objects");
 
         /// @see ShaderVisitor::setForceShaders
         void setForceShaders(bool force);
@@ -72,6 +73,8 @@ namespace Resource
 
         void setSpecularMapPattern(const std::string& pattern);
 
+        void setApplyLightingToEnvMaps(bool apply);
+
         void setShaderPath(const std::string& path);
 
         /// Check if a given scene is loaded and if so, update its usage timestamp to prevent it from being unloaded
@@ -81,7 +84,7 @@ namespace Resource
         /// @note If the given filename does not exist or fails to load, an error marker mesh will be used instead.
         ///  If even the error marker mesh can not be found, an exception is thrown.
         /// @note Thread safe.
-        osg::ref_ptr<const osg::Node> getTemplate(const std::string& name);
+        osg::ref_ptr<const osg::Node> getTemplate(const std::string& name, bool compile=true);
 
         /// Create an instance of the given scene template and cache it for later use, so that future calls to getInstance() can simply
         /// return this cached object instead of creating a new one.
@@ -145,7 +148,7 @@ namespace Resource
 
     private:
 
-        Shader::ShaderVisitor* createShaderVisitor();
+        Shader::ShaderVisitor* createShaderVisitor(const std::string& shaderPrefix = "objects");
 
         std::unique_ptr<Shader::ShaderManager> mShaderManager;
         bool mForceShaders;
@@ -155,11 +158,12 @@ namespace Resource
         std::string mNormalHeightMapPattern;
         bool mAutoUseSpecularMaps;
         std::string mSpecularMapPattern;
+        bool mApplyLightingToEnvMaps;
 
         osg::ref_ptr<MultiObjectCache> mInstanceCache;
 
         osg::ref_ptr<Resource::SharedStateManager> mSharedStateManager;
-        mutable OpenThreads::Mutex mSharedStateMutex;
+        mutable std::mutex mSharedStateMutex;
 
         Resource::ImageManager* mImageManager;
         Resource::NifFileManager* mNifFileManager;

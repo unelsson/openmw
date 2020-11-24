@@ -1,8 +1,8 @@
 #ifndef OPENMW_COMPONENTS_DETOURNAVIGATOR_SETTINGS_H
 #define OPENMW_COMPONENTS_DETOURNAVIGATOR_SETTINGS_H
 
-#include <boost/optional.hpp>
-
+#include <chrono>
+#include <optional>
 #include <string>
 
 namespace DetourNavigator
@@ -38,9 +38,10 @@ namespace DetourNavigator
         std::size_t mTrianglesPerChunk = 0;
         std::string mRecastMeshPathPrefix;
         std::string mNavMeshPathPrefix;
+        std::chrono::milliseconds mMinUpdateInterval;
     };
 
-    boost::optional<Settings> makeSettingsFromSettingsManager();
+    std::optional<Settings> makeSettingsFromSettingsManager();
 }
 
 #endif

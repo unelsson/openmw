@@ -10,13 +10,13 @@
 #include <components/esm/projectilestate.hpp>
 
 #include <components/misc/constants.hpp>
+#include <components/misc/convert.hpp>
 
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 
 #include <components/sceneutil/controller.hpp>
 #include <components/sceneutil/visitor.hpp>
-#include <components/sceneutil/vismask.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 
 #include "../mwworld/manualref.hpp"
@@ -36,6 +36,7 @@
 #include "../mwmechanics/weapontype.hpp"
 
 #include "../mwrender/animation.hpp"
+#include "../mwrender/vismask.hpp"
 #include "../mwrender/renderingmanager.hpp"
 #include "../mwrender/util.hpp"
 
@@ -81,7 +82,7 @@ namespace
                 continue;
 
             if (magicEffect->mBolt.empty())
-                projectileIDs.push_back("VFX_DefaultBolt");
+                projectileIDs.emplace_back("VFX_DefaultBolt");
             else
                 projectileIDs.push_back(magicEffect->mBolt);
 
@@ -166,7 +167,7 @@ namespace MWWorld
         {
         }
 
-        virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+        void operator()(osg::Node* node, osg::NodeVisitor* nv) override
         {
             osg::PositionAttitudeTransform* transform = static_cast<osg::PositionAttitudeTransform*>(node);
 
@@ -188,7 +189,7 @@ namespace MWWorld
                                         bool rotate, bool createLight, osg::Vec4 lightDiffuseColor, std::string texture)
     {
         state.mNode = new osg::PositionAttitudeTransform;
-        state.mNode->setNodeMask(SceneUtil::Mask_Effect);
+        state.mNode->setNodeMask(MWRender::Mask_Effect);
         state.mNode->setPosition(pos);
         state.mNode->setAttitude(orient);
 
@@ -228,7 +229,7 @@ namespace MWWorld
             projectileLight->setPosition(osg::Vec4(pos, 1.0));
             
             SceneUtil::LightSource* projectileLightSource = new SceneUtil::LightSource;
-            projectileLightSource->setNodeMask(SceneUtil::Mask_Lighting);
+            projectileLightSource->setNodeMask(MWRender::Mask_Lighting);
             projectileLightSource->setRadius(66.f);
             
             state.mNode->addChild(projectileLightSource);
@@ -290,6 +291,12 @@ namespace MWWorld
         // Non-projectile should have been removed by getMagicBoltData
         if (state.mEffects.mList.empty())
             return;
+
+        if (!caster.getClass().isActor() && fallbackDirection.length2() <= 0)
+        {
+            Log(Debug::Warning) << "Unable to launch magic bolt (direction to target is empty)";
+            return;
+        }
 
         MWWorld::ManualRef ref(MWBase::Environment::get().getWorld()->getStore(), state.mIdMagic.at(0));
         MWWorld::Ptr ptr = ref.getPtr();
@@ -381,6 +388,18 @@ namespace MWWorld
     {
         for (std::vector<MagicBoltState>::iterator it = mMagicBolts.begin(); it != mMagicBolts.end();)
         {
+            // If the actor caster is gone, the magic bolt needs to be removed from the scene during the next frame.
+            MWWorld::Ptr caster = it->getCaster();
+            if (!caster.isEmpty() && caster.getClass().isActor())
+            {
+                if (caster.getRefData().getCount() <= 0 || caster.getClass().getCreatureStats(caster).isDead())
+                {
+                    cleanupMagicBolt(*it);
+                    it = mMagicBolts.erase(it);
+                    continue;
+                }
+            }
+
             osg::Quat orient = it->mNode->getAttitude();
             static float fTargetSpellMaxSpeed = MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>()
                         .find("fTargetSpellMaxSpeed")->mValue.getFloat();
@@ -399,8 +418,6 @@ namespace MWWorld
 
             update(*it, duration);
 
-            MWWorld::Ptr caster = it->getCaster();
-
             // For AI actors, get combat targets to use in the ray cast. Only those targets will return a positive hit result.
             std::vector<MWWorld::Ptr> targetActors;
             if (!caster.isEmpty() && caster.getClass().isActor() && caster != MWMechanics::getPlayer())
@@ -408,7 +425,7 @@ namespace MWWorld
 
             // Check for impact
             // TODO: use a proper btRigidBody / btGhostObject?
-            MWPhysics::PhysicsSystem::RayResult result = mPhysics->castRay(pos, newPos, caster, targetActors, 0xff, MWPhysics::CollisionType_Projectile);
+            MWPhysics::RayCastingResult result = mPhysics->castRay(pos, newPos, caster, targetActors, 0xff, MWPhysics::CollisionType_Projectile);
 
             bool hit = false;
             if (result.mHit)
@@ -426,6 +443,7 @@ namespace MWWorld
                     cast.mSourceName = it->mSourceName;
                     cast.mStack = false;
                     cast.inflict(result.mHitObject, caster, it->mEffects, ESM::RT_Target, false, true);
+                    mPhysics->reportCollision(Misc::Convert::toBullet(result.mHitPos), Misc::Convert::toBullet(result.mHitNormal));
                 }
             }
 
@@ -484,7 +502,7 @@ namespace MWWorld
 
             // Check for impact
             // TODO: use a proper btRigidBody / btGhostObject?
-            MWPhysics::PhysicsSystem::RayResult result = mPhysics->castRay(pos, newPos, caster, targetActors, 0xff, MWPhysics::CollisionType_Projectile);
+            MWPhysics::RayCastingResult result = mPhysics->castRay(pos, newPos, caster, targetActors, 0xff, MWPhysics::CollisionType_Projectile);
 
             bool underwater = MWBase::Environment::get().getWorld()->isUnderwater(MWMechanics::getPlayer().getCell(), newPos);
 
@@ -506,6 +524,7 @@ namespace MWWorld
                     caster = result.mHitObject;
 
                 MWMechanics::projectileHit(caster, result.mHitObject, bow, projectileRef.getPtr(), result.mHit ? result.mHitPos : newPos, it->mAttackStrength);
+                mPhysics->reportCollision(Misc::Convert::toBullet(result.mHitPos), Misc::Convert::toBullet(result.mHitNormal));
 
                 if (underwater)
                     mRendering->emitWaterRipple(newPos);

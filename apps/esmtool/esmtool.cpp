@@ -87,7 +87,7 @@ bool parseOptions (int argc, char** argv, Arguments &info)
         ("plain,p", "Print contents of dialogs, books and scripts. "
          "(skipped by default)"
          "Only affects dump mode.")
-        ("quiet,q", "Supress all record information. Useful for speed tests.")
+        ("quiet,q", "Suppress all record information. Useful for speed tests.")
         ("loadcells,C", "Browse through contents of all cells.")
 
         ( "encoding,e", bpo::value<std::string>(&(info.encoding))->
@@ -258,18 +258,37 @@ void loadCell(ESM::Cell &cell, ESM::ESMReader &esm, Arguments& info)
         if(quiet) continue;
 
         std::cout << "    Refnum: " << ref.mRefNum.mIndex << std::endl;
-        std::cout << "    ID: '" << ref.mRefID << "'\n";
-        std::cout << "    Owner: '" << ref.mOwner << "'\n";
-        std::cout << "    Global: '" << ref.mGlobalVariable << "'" << std::endl;
-        std::cout << "    Faction: '" << ref.mFaction << "'" << std::endl;
-        std::cout << "    Faction rank: '" << ref.mFactionRank << "'" << std::endl;
-        std::cout << "    Enchantment charge: '" << ref.mEnchantmentCharge << "'\n";
-        std::cout << "    Uses/health: '" << ref.mChargeInt << "'\n";
-        std::cout << "    Gold value: '" << ref.mGoldValue << "'\n";
-        std::cout << "    Blocked: '" << static_cast<int>(ref.mReferenceBlocked) << "'" << std::endl;
+        std::cout << "    ID: " << ref.mRefID << std::endl;
+        std::cout << "    Position: (" << ref.mPos.pos[0] << ", " << ref.mPos.pos[1] << ", " << ref.mPos.pos[2] << ")" << std::endl;
+        if (ref.mScale != 1.f)
+            std::cout << "    Scale: " << ref.mScale << std::endl;
+        if (!ref.mOwner.empty())
+            std::cout << "    Owner: " << ref.mOwner << std::endl;
+        if (!ref.mGlobalVariable.empty())
+            std::cout << "    Global: " << ref.mGlobalVariable << std::endl;
+        if (!ref.mFaction.empty())
+            std::cout << "    Faction: " << ref.mFaction << std::endl;
+        if (!ref.mFaction.empty() || ref.mFactionRank != -2)
+            std::cout << "    Faction rank: " << ref.mFactionRank << std::endl;
+        std::cout << "    Enchantment charge: " << ref.mEnchantmentCharge << std::endl;
+        std::cout << "    Uses/health: " << ref.mChargeInt << std::endl;
+        std::cout << "    Gold value: " << ref.mGoldValue << std::endl;
+        std::cout << "    Blocked: " << static_cast<int>(ref.mReferenceBlocked) << std::endl;
         std::cout << "    Deleted: " << deleted << std::endl;
         if (!ref.mKey.empty())
-            std::cout << "    Key: '" << ref.mKey << "'" << std::endl;
+            std::cout << "    Key: " << ref.mKey << std::endl;
+        std::cout << "    Lock level: " << ref.mLockLevel << std::endl;
+        if (!ref.mTrap.empty())
+            std::cout << "    Trap: " << ref.mTrap << std::endl;
+        if (!ref.mSoul.empty())
+            std::cout << "    Soul: " << ref.mSoul << std::endl;
+        if (ref.mTeleport)
+        {
+            std::cout << "    Destination position: (" << ref.mDoorDest.pos[0] << ", "
+                      << ref.mDoorDest.pos[1] << ", " << ref.mDoorDest.pos[2] << ")" << std::endl;
+            if (!ref.mDestCell.empty())
+                std::cout << "    Destination cell: " << ref.mDestCell << std::endl;
+        }
     }
 }
 
@@ -333,12 +352,12 @@ int load(Arguments& info)
             std::cout << "Author: " << esm.getAuthor() << std::endl
                  << "Description: " << esm.getDesc() << std::endl
                  << "File format version: " << esm.getFVer() << std::endl;
-            std::vector<ESM::Header::MasterData> m = esm.getGameFiles();
-            if (!m.empty())
+            std::vector<ESM::Header::MasterData> masterData = esm.getGameFiles();
+            if (!masterData.empty())
             {
                 std::cout << "Masters:" << std::endl;
-                for(unsigned int i=0;i<m.size();i++)
-                    std::cout << "  " << m[i].name << ", " << m[i].size << " bytes" << std::endl;
+                for(const auto& master : masterData)
+                    std::cout << "  " << master.name << ", " << master.size << " bytes" << std::endl;
             }
         }
 
@@ -350,7 +369,7 @@ int load(Arguments& info)
             esm.getRecHeader(flags);
 
             EsmTool::RecordBase *record = EsmTool::RecordBase::create(n);
-            if (record == 0)
+            if (record == nullptr)
             {
                 if (std::find(skipped.begin(), skipped.end(), n.intval) == skipped.end())
                 {
@@ -519,8 +538,8 @@ int comp(Arguments& info)
     Arguments fileOne;
     Arguments fileTwo;
 
-    fileOne.raw_given = 0;
-    fileTwo.raw_given = 0;
+    fileOne.raw_given = false;
+    fileTwo.raw_given = false;
 
     fileOne.mode = "clone";
     fileTwo.mode = "clone";

@@ -72,7 +72,7 @@ The Bethesda provided assets have a 4:3 aspect ratio, but other assets are permi
 If this setting is false, the assets will be centered in their correct aspect ratio,
 with black bars filling the remainder of the screen.
 
-This setting can only be configured by editing the settings configuration file.
+This setting can be configured in the Interface section of Advanced tab of the launcher.
 
 subtitles
 ---------
@@ -140,3 +140,39 @@ The alpha value is currently ignored.
 This setting can only be configured by editing the settings configuration file.
 This setting has no effect if the crosshair setting in the HUD Settings Section is false.
 This setting has no effect if the show owned setting in the Game Settings Section is false.
+
+color topic enable
+------------------
+
+:Type:      boolean
+:Range:		True/False
+:Default:	False
+
+This setting controls whether the topics available in the dialogue topic list are coloured according to their state.
+See 'color topic specific' and 'color topic exhausted' for details.
+
+color topic specific
+--------------------
+
+:Type:		RGBA floating point
+:Range:		0.0 to 1.0
+:Default:	empty
+
+This setting overrides the colour of dialogue topics that have a response unique to the actors speaking.
+The value is composed of four floating point values representing the red, green, blue and alpha channels.
+The alpha value is currently ignored.
+
+A topic response is considered unique if its Actor filter field contains the speaking actor's object ID and hasn't yet been read.
+
+color topic exhausted
+---------------------
+
+:Type:		RGBA floating point
+:Range:		0.0 to 1.0
+:Default:	empty
+
+This setting overrides the colour of dialogue topics which have been "exhausted" by the player.
+The value is composed of four floating point values representing the red, green, blue and alpha channels.
+The alpha value is currently ignored.
+
+A topic is considered "exhausted" if the response the player is about to see has already been seen.

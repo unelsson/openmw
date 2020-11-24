@@ -13,7 +13,7 @@
 #include "../mwbase/mechanicsmanager.hpp"
 
 #include "creaturestats.hpp"
-#include "spellcasting.hpp"
+#include "spellutil.hpp"
 #include "actorutil.hpp"
 #include "weapontype.hpp"
 
@@ -63,7 +63,7 @@ namespace MWMechanics
         const MWWorld::Ptr& player = getPlayer();
         MWWorld::ContainerStore& store = player.getClass().getContainerStore(player);
         ESM::Enchantment enchantment;
-        enchantment.mData.mAutocalc = 0;
+        enchantment.mData.mFlags = 0;
         enchantment.mData.mType = mCastStyle;
         enchantment.mData.mCost = getBaseCastCost();
 
@@ -219,7 +219,7 @@ namespace MWMechanics
             if (iter->mEffects.mList.size() != toFind.mEffects.mList.size())
                 continue;
 
-            if (iter->mData.mAutocalc != toFind.mData.mAutocalc
+            if (iter->mData.mFlags != toFind.mData.mFlags
                     || iter->mData.mType != toFind.mData.mType
                     || iter->mData.mCost != toFind.mData.mCost
                     || iter->mData.mCharge != toFind.mData.mCharge)
@@ -281,7 +281,7 @@ namespace MWMechanics
         float priceMultipler = MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>().find ("fEnchantmentValueMult")->mValue.getFloat();
         int price = MWBase::Environment::get().getMechanicsManager()->getBarterOffer(mEnchanter, static_cast<int>(getEnchantPoints() * priceMultipler), true);
         price *= getEnchantItemsCount() * getTypeMultiplier();
-        return price;
+        return std::max(1, price);
     }
 
     int Enchanting::getGemCharge() const

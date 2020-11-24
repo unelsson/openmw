@@ -6,6 +6,7 @@
 #include <set>
 
 #include "../mwworld/ptr.hpp"
+#include "../mwsound/type.hpp"
 
 namespace MWWorld
 {
@@ -14,6 +15,14 @@ namespace MWWorld
 
 namespace MWSound
 {
+    // Each entry excepts of MaxCount should be used only in one place
+    enum BlockerType
+    {
+        VideoPlayback,
+
+        MaxCount
+    };
+
     class Sound;
     class Stream;
     struct Sound_Decoder;
@@ -36,14 +45,7 @@ namespace MWSound
         LoopNoEnv = Loop | NoEnv,
         LoopRemoveAtDistance = Loop | RemoveAtDistance
     };
-    enum class Type {
-        Sfx   = 1<<4, /* Normal SFX sound */
-        Voice = 1<<5, /* Voice sound */
-        Foot  = 1<<6, /* Footstep sound */
-        Music = 1<<7, /* Music track */
-        Movie = 1<<8, /* Movie audio track */
-        Mask  = Sfx | Voice | Foot | Music | Movie
-    };
+
     // Used for creating a type mask for SoundManager::pauseSounds and resumeSounds
     inline int operator~(Type a) { return ~static_cast<int>(a); }
     inline int operator&(Type a, Type b) { return static_cast<int>(a) & static_cast<int>(b); }
@@ -155,9 +157,6 @@ namespace MWBase
             virtual void stopSound(const MWWorld::CellStore *cell) = 0;
             ///< Stop all sounds for the given cell.
 
-            virtual void stopSound(const std::string& soundId) = 0;
-            ///< Stop a non-3d looping sound
-
             virtual void fadeOutSound3D(const MWWorld::ConstPtr &reference, const std::string& soundId, float duration) = 0;
             ///< Fade out given sound (that is already playing) of given object
             ///< @param reference Reference to object, whose sound is faded out
@@ -168,11 +167,14 @@ namespace MWBase
             ///< Is the given sound currently playing on the given object?
             ///  If you want to check if sound played with playSound is playing, use empty Ptr
 
-            virtual void pauseSounds(int types=static_cast<int>(Type::Mask)) = 0;
+            virtual void pauseSounds(MWSound::BlockerType blocker, int types=int(Type::Mask)) = 0;
             ///< Pauses all currently playing sounds, including music.
 
-            virtual void resumeSounds(int types=static_cast<int>(Type::Mask)) = 0;
+            virtual void resumeSounds(MWSound::BlockerType blocker) = 0;
             ///< Resumes all previously paused sounds.
+
+            virtual void pausePlayback() = 0;
+            virtual void resumePlayback() = 0;
 
             virtual void update(float duration) = 0;
 

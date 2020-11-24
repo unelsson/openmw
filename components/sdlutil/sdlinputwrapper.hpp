@@ -8,7 +8,6 @@
 #include <SDL_events.h>
 #include <SDL_version.h>
 
-#include "OISCompat.hpp"
 #include "events.hpp"
 
 namespace osgViewer
@@ -26,6 +25,7 @@ namespace SDLUtil
         ~InputWrapper();
 
         void setMouseEventCallback(MouseListener* listen) { mMouseListener = listen; }
+        void setSensorEventCallback(SensorListener* listen) { mSensorListener = listen; }
         void setKeyboardEventCallback(KeyListener* listen) { mKeyboardListener = listen; }
         void setWindowEventCallback(WindowListener* listen) { mWindowListener = listen; }
         void setControllerEventCallback(ControllerListener* listen) { mConListener = listen; }
@@ -39,8 +39,6 @@ namespace SDLUtil
         bool getMouseRelative() { return mMouseRelative; }
         void setGrabPointer(bool grab);
 
-        OIS::KeyCode sdl2OISKeyCode(SDL_Keycode code);
-
         void warpMouse(int x, int y);
 
         void updateMouseSettings();
@@ -52,18 +50,14 @@ namespace SDLUtil
         void _wrapMousePointer(const SDL_MouseMotionEvent &evt);
         MouseMotionEvent _packageMouseMotion(const SDL_Event& evt);
 
-        void _setupOISKeys();
-
         SDL_Window* mSDLWindow;
         osg::ref_ptr<osgViewer::Viewer> mViewer;
 
         MouseListener* mMouseListener;
+        SensorListener* mSensorListener;
         KeyListener* mKeyboardListener;
         WindowListener* mWindowListener;
         ControllerListener* mConListener;
-
-        typedef std::map<SDL_Keycode, OIS::KeyCode> KeyMap;
-        KeyMap mKeyMap;
 
         Uint16 mWarpX;
         Uint16 mWarpY;

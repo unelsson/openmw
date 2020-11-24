@@ -16,6 +16,7 @@
 #include "draganddrop.hpp"
 #include "countdialog.hpp"
 #include "widgets.hpp"
+#include "tooltips.hpp"
 
 namespace
 {
@@ -86,7 +87,8 @@ void CompanionWindow::onItemSelected(int index)
     if (count > 1 && !shift)
     {
         CountDialog* dialog = MWBase::Environment::get().getWindowManager()->getCountDialog();
-        dialog->openCountDialog(object.getClass().getName(object), "#{sTake}", count);
+        std::string name = object.getClass().getName(object) + MWGui::ToolTips::getSoulString(object.getCellRef());
+        dialog->openCountDialog(name, "#{sTake}", count);
         dialog->eventOkClicked.clear();
         dialog->eventOkClicked += MyGUI::newDelegate(this, &CompanionWindow::dragItem);
     }
@@ -161,8 +163,8 @@ bool CompanionWindow::exit()
     if (mModel && mModel->hasProfit(mPtr) && getProfit(mPtr) < 0)
     {
         std::vector<std::string> buttons;
-        buttons.push_back("#{sCompanionWarningButtonOne}");
-        buttons.push_back("#{sCompanionWarningButtonTwo}");
+        buttons.emplace_back("#{sCompanionWarningButtonOne}");
+        buttons.emplace_back("#{sCompanionWarningButtonTwo}");
         mMessageBoxManager->createInteractiveMessageBox("#{sCompanionWarningMessage}", buttons);
         mMessageBoxManager->eventButtonPressed += MyGUI::newDelegate(this, &CompanionWindow::onMessageBoxButtonClicked);
         return false;

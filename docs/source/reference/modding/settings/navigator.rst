@@ -74,6 +74,20 @@ Game will not eat all memory at once.
 Memory will be consumed in approximately linear dependency from number of nav mesh updates.
 But only for new locations or already dropped from cache.
 
+min update interval ms
+----------------
+
+:Type:		integer
+:Range:		>= 0
+:Default:	250
+
+Minimum time duration required to pass before next navmesh update for the same tile in milliseconds.
+Only tiles affected where objects are transformed.
+Next update for tile with added or removed object will not be delayed.
+Visible ingame effect is navmesh update around opening or closing door.
+Primary usage is for rotating signs like in Seyda Neen at Arrille's Tradehouse entrance.
+Decreasing this value may increase CPU usage by background threads.
+
 Developer's settings
 ********************
 
@@ -164,6 +178,20 @@ enable agents paths render
 Render agents paths.
 Make visible all NPC's and creaure's plans where they are going.
 Works even if Navigator is disabled.
+Potentially decreases performance.
+
+enable recast mesh render
+----------------------
+
+:Type:		boolean
+:Range:		True/False
+:Default:	False
+
+Render recast mesh that is built as set of culled tiles from physical mesh.
+Should show similar mesh to physical one.
+Little difference can be a result of floating point error.
+Absent pieces usually mean a bug in recast mesh tiles building.
+Allows to do in-game debug.
 Potentially decreases performance.
 
 Expert settings

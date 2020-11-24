@@ -16,7 +16,6 @@
 #include <components/debug/debuglog.hpp>
 
 #include <components/sceneutil/workqueue.hpp>
-#include <components/sceneutil/vismask.hpp>
 
 #include <components/esm/globalmap.hpp>
 
@@ -24,6 +23,8 @@
 #include "../mwbase/world.hpp"
 
 #include "../mwworld/esmstore.hpp"
+
+#include "vismask.hpp"
 
 namespace
 {
@@ -69,13 +70,13 @@ namespace
         {
         }
 
-        virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+        void operator()(osg::Node* node, osg::NodeVisitor* nv) override
         {
             if (mRendered)
             {
                 if (mParent->copyResult(static_cast<osg::Camera*>(node), nv->getTraversalNumber()))
                 {
-                    node->setNodeMask(SceneUtil::Mask_Disabled);
+                    node->setNodeMask(0);
                     mParent->markForRemoval(static_cast<osg::Camera*>(node));
                 }
                 return;
@@ -104,7 +105,7 @@ namespace MWRender
         {
         }
 
-        virtual void doWork()
+        void doWork() override
         {
             osg::ref_ptr<osg::Image> image = new osg::Image;
             image->allocateImage(mWidth, mHeight, 1, GL_RGB, GL_UNSIGNED_BYTE);
@@ -287,7 +288,7 @@ namespace MWRender
                                                 float srcLeft, float srcTop, float srcRight, float srcBottom)
     {
         osg::ref_ptr<osg::Camera> camera (new osg::Camera);
-        camera->setNodeMask(SceneUtil::Mask_RenderToTexture);
+        camera->setNodeMask(Mask_RenderToTexture);
         camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
         camera->setViewMatrix(osg::Matrix::identity());
         camera->setProjectionMatrix(osg::Matrix::identity());
@@ -457,7 +458,7 @@ namespace MWRender
         if (map.mImageData.empty())
             return;
 
-        Files::IMemStream istream(&map.mImageData[0], map.mImageData.size());
+        Files::IMemStream istream(map.mImageData.data(), map.mImageData.size());
 
         osgDB::ReaderWriter* readerwriter = osgDB::Registry::instance()->getReaderWriterForExtension("png");
         if (!readerwriter)
@@ -522,7 +523,7 @@ namespace MWRender
 
         if (srcBox == destBox && imageWidth == mWidth && imageHeight == mHeight)
         {
-            mOverlayImage->copySubImage(0, 0, 0, image);
+            mOverlayImage = image;
 
             requestOverlayTextureUpdate(0, 0, mWidth, mHeight, texture, true, false);
         }

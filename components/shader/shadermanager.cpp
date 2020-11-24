@@ -34,6 +34,9 @@ namespace Shader
             foundPos = source.find_first_of("\n\r", foundPos);
             foundPos = source.find_first_not_of("\n\r", foundPos);
 
+            if (foundPos == std::string::npos)
+                break;
+
             size_t lineDirectivePosition = source.rfind("#line", foundPos);
             int lineNumber;
             if (lineDirectivePosition != std::string::npos)
@@ -58,45 +61,39 @@ namespace Shader
         return true;
     }
 
-    bool parseIncludes(boost::filesystem::path shaderPath, std::string& source)
+    // Recursively replaces include statements with the actual source of the included files.
+    // Adjusts #line statements accordingly and detects cyclic includes.
+    // includingFiles is the set of files that include this file directly or indirectly, and is intentionally not a reference to allow automatic cleanup.
+    static bool parseIncludes(boost::filesystem::path shaderPath, std::string& source, const std::string& fileName, int& fileNumber, std::set<boost::filesystem::path> includingFiles)
     {
+        // An include is cyclic if it is being included by itself
+        if (includingFiles.insert(shaderPath/fileName).second == false)
+        {
+            Log(Debug::Error) << "Shader " << fileName << " error: Detected cyclic #includes";
+            return false;
+        }
+
         Misc::StringUtils::replaceAll(source, "\r\n", "\n");
 
-        std::set<boost::filesystem::path> includedFiles;
         size_t foundPos = 0;
-        int fileNumber = 1;
         while ((foundPos = source.find("#include")) != std::string::npos)
         {
             size_t start = source.find('"', foundPos);
-            if (start == std::string::npos || start == source.size()-1)
+            if (start == std::string::npos || start == source.size() - 1)
             {
-                Log(Debug::Error) << "Invalid #include";
+                Log(Debug::Error) << "Shader " << fileName << " error: Invalid #include";
                 return false;
             }
-            size_t end = source.find('"', start+1);
+            size_t end = source.find('"', start + 1);
             if (end == std::string::npos)
             {
-                Log(Debug::Error) << "Invalid #include";
+                Log(Debug::Error) << "Shader " << fileName << " error: Invalid #include";
                 return false;
             }
-            std::string includeFilename = source.substr(start+1, end-(start+1));
+            std::string includeFilename = source.substr(start + 1, end - (start + 1));
             boost::filesystem::path includePath = shaderPath / includeFilename;
-            boost::filesystem::ifstream includeFstream;
-            includeFstream.open(includePath);
-            if (includeFstream.fail())
-            {
-                Log(Debug::Error) << "Failed to open " << includePath.string();
-                return false;
-            }
 
-            std::stringstream buffer;
-            buffer << includeFstream.rdbuf();
-            std::string stringRepresentation = buffer.str();
-            addLineDirectivesAfterConditionalBlocks(stringRepresentation);
-
-            // insert #line directives so we get correct line numbers in compiler errors
-            int includedFileNumber = fileNumber++;
-
+            // Determine the line number that will be used for the #line directive following the included source
             size_t lineDirectivePosition = source.rfind("#line", foundPos);
             int lineNumber;
             if (lineDirectivePosition != std::string::npos)
@@ -109,25 +106,39 @@ namespace Shader
             else
             {
                 lineDirectivePosition = 0;
-                lineNumber = 1;
+                lineNumber = 0;
             }
             lineNumber += std::count(source.begin() + lineDirectivePosition, source.begin() + foundPos, '\n');
+
+            // Include the file recursively
+            boost::filesystem::ifstream includeFstream;
+            includeFstream.open(includePath);
+            if (includeFstream.fail())
+            {
+                Log(Debug::Error) << "Shader " << fileName << " error: Failed to open include " << includePath.string();
+                return false;
+            }
+            int includedFileNumber = fileNumber++;
+
+            std::stringstream buffer;
+            buffer << includeFstream.rdbuf();
+            std::string stringRepresentation = buffer.str();
+            if (!addLineDirectivesAfterConditionalBlocks(stringRepresentation)
+                || !parseIncludes(shaderPath, stringRepresentation, includeFilename, fileNumber, includingFiles))
+            {
+                Log(Debug::Error) << "In file included from " << fileName << "." << lineNumber;
+                return false;
+            }
 
             std::stringstream toInsert;
             toInsert << "#line 0 " << includedFileNumber << "\n" << stringRepresentation << "\n#line " << lineNumber << " 0\n";
 
-            source.replace(foundPos, (end-foundPos+1), toInsert.str());
-
-            if (includedFiles.insert(includePath).second == false)
-            {
-                Log(Debug::Error) << "Detected cyclic #includes";
-                return false;
-            }
+            source.replace(foundPos, (end - foundPos + 1), toInsert.str());
         }
         return true;
     }
 
-    bool parseFors(std::string& source)
+    bool parseFors(std::string& source, const std::string& templateName)
     {
         const char escapeCharacter = '$';
         size_t foundPos = 0;
@@ -136,13 +147,13 @@ namespace Shader
             size_t endPos = source.find_first_of(" \n\r()[].;,", foundPos);
             if (endPos == std::string::npos)
             {
-                Log(Debug::Error) << "Unexpected EOF";
+                Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                 return false;
             }
             std::string command = source.substr(foundPos + 1, endPos - (foundPos + 1));
             if (command != "foreach")
             {
-                Log(Debug::Error) << "Unknown shader directive: $" << command;
+                Log(Debug::Error) << "Shader " << templateName << " error: Unknown shader directive: $" << command;
                 return false;
             }
 
@@ -150,7 +161,7 @@ namespace Shader
             size_t iterNameEnd = source.find_first_of(" \n\r()[].;,", iterNameStart);
             if (iterNameEnd == std::string::npos)
             {
-                Log(Debug::Error) << "Unexpected EOF";
+                Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                 return false;
             }
             std::string iteratorName = "$" + source.substr(iterNameStart, iterNameEnd - iterNameStart);
@@ -159,7 +170,7 @@ namespace Shader
             size_t listEnd = source.find_first_of("\n\r", listStart);
             if (listEnd == std::string::npos)
             {
-                Log(Debug::Error) << "Unexpected EOF";
+                Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                 return false;
             }
             std::string list = source.substr(listStart, listEnd - listStart);
@@ -171,13 +182,13 @@ namespace Shader
             size_t contentEnd = source.find("$endforeach", contentStart);
             if (contentEnd == std::string::npos)
             {
-                Log(Debug::Error) << "Unexpected EOF";
+                Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                 return false;
             }
             std::string content = source.substr(contentStart, contentEnd - contentStart);
 
             size_t overallEnd = contentEnd + std::string("$endforeach").length();
-            
+
             size_t lineDirectivePosition = source.rfind("#line", overallEnd);
             int lineNumber;
             if (lineDirectivePosition != std::string::npos)
@@ -210,7 +221,8 @@ namespace Shader
         return true;
     }
 
-    bool parseDefines(std::string& source, const ShaderManager::DefineMap& defines, const ShaderManager::DefineMap& globalDefines)
+    bool parseDefines(std::string& source, const ShaderManager::DefineMap& defines,
+        const ShaderManager::DefineMap& globalDefines, const std::string& templateName)
     {
         const char escapeCharacter = '@';
         size_t foundPos = 0;
@@ -220,7 +232,7 @@ namespace Shader
             size_t endPos = source.find_first_of(" \n\r()[].;,", foundPos);
             if (endPos == std::string::npos)
             {
-                Log(Debug::Error) << "Unexpected EOF";
+                Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                 return false;
             }
             std::string define = source.substr(foundPos+1, endPos - (foundPos+1));
@@ -233,7 +245,7 @@ namespace Shader
                 size_t iterNameEnd = source.find_first_of(" \n\r()[].;,", iterNameStart);
                 if (iterNameEnd == std::string::npos)
                 {
-                    Log(Debug::Error)  << "Unexpected EOF";
+                    Log(Debug::Error) << "Shader " << templateName << " error: Unexpected EOF";
                     return false;
                 }
                 forIterators.push_back(source.substr(iterNameStart, iterNameEnd - iterNameStart));
@@ -243,7 +255,7 @@ namespace Shader
                 source.replace(foundPos, 1, "$");
                 if (forIterators.empty())
                 {
-                    Log(Debug::Error) << "endforeach without foreach";
+                    Log(Debug::Error) << "Shader " << templateName << " error: endforeach without foreach";
                     return false;
                 }
                 else
@@ -263,48 +275,50 @@ namespace Shader
             }
             else
             {
-                Log(Debug::Error) << "Undefined " << define;
+                Log(Debug::Error) << "Shader " << templateName << " error: Undefined " << define;
                 return false;
             }
         }
         return true;
     }
 
-    osg::ref_ptr<osg::Shader> ShaderManager::getShader(const std::string &shaderTemplate, const ShaderManager::DefineMap &defines, osg::Shader::Type shaderType)
+    osg::ref_ptr<osg::Shader> ShaderManager::getShader(const std::string &templateName, const ShaderManager::DefineMap &defines, osg::Shader::Type shaderType)
     {
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
 
         // read the template if we haven't already
-        TemplateMap::iterator templateIt = mShaderTemplates.find(shaderTemplate);
+        TemplateMap::iterator templateIt = mShaderTemplates.find(templateName);
         if (templateIt == mShaderTemplates.end())
         {
-            boost::filesystem::path p = (boost::filesystem::path(mPath) / shaderTemplate);
+            boost::filesystem::path path = (boost::filesystem::path(mPath) / templateName);
             boost::filesystem::ifstream stream;
-            stream.open(p);
+            stream.open(path);
             if (stream.fail())
             {
-                Log(Debug::Error) << "Failed to open " << p.string();
+                Log(Debug::Error) << "Failed to open " << path.string();
                 return nullptr;
             }
             std::stringstream buffer;
             buffer << stream.rdbuf();
 
             // parse includes
+            int fileNumber = 1;
             std::string source = buffer.str();
-            if (!addLineDirectivesAfterConditionalBlocks(source) || !parseIncludes(boost::filesystem::path(mPath), source))
+            if (!addLineDirectivesAfterConditionalBlocks(source)
+                || !parseIncludes(boost::filesystem::path(mPath), source, templateName, fileNumber, {}))
                 return nullptr;
 
-            templateIt = mShaderTemplates.insert(std::make_pair(shaderTemplate, source)).first;
+            templateIt = mShaderTemplates.insert(std::make_pair(templateName, source)).first;
         }
 
-        ShaderMap::iterator shaderIt = mShaders.find(std::make_pair(shaderTemplate, defines));
+        ShaderMap::iterator shaderIt = mShaders.find(std::make_pair(templateName, defines));
         if (shaderIt == mShaders.end())
         {
             std::string shaderSource = templateIt->second;
-            if (!parseDefines(shaderSource, defines, mGlobalDefines) || !parseFors(shaderSource))
+            if (!parseDefines(shaderSource, defines, mGlobalDefines, templateName) || !parseFors(shaderSource, templateName))
             {
                 // Add to the cache anyway to avoid logging the same error over and over.
-                mShaders.insert(std::make_pair(std::make_pair(shaderTemplate, defines), nullptr));
+                mShaders.insert(std::make_pair(std::make_pair(templateName, defines), nullptr));
                 return nullptr;
             }
 
@@ -314,14 +328,14 @@ namespace Shader
             static unsigned int counter = 0;
             shader->setName(std::to_string(counter++));
 
-            shaderIt = mShaders.insert(std::make_pair(std::make_pair(shaderTemplate, defines), shader)).first;
+            shaderIt = mShaders.insert(std::make_pair(std::make_pair(templateName, defines), shader)).first;
         }
         return shaderIt->second;
     }
 
     osg::ref_ptr<osg::Program> ShaderManager::getProgram(osg::ref_ptr<osg::Shader> vertexShader, osg::ref_ptr<osg::Shader> fragmentShader)
     {
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         ProgramMap::iterator found = mPrograms.find(std::make_pair(vertexShader, fragmentShader));
         if (found == mPrograms.end())
         {
@@ -350,7 +364,7 @@ namespace Shader
                 // I'm not sure how to handle a shader that was already broken as there's no way to get a potential replacement to the nodes that need it.
                 continue;
             std::string shaderSource = mShaderTemplates[templateId];
-            if (!parseDefines(shaderSource, defines, mGlobalDefines) || !parseFors(shaderSource))
+            if (!parseDefines(shaderSource, defines, mGlobalDefines, templateId) || !parseFors(shaderSource, templateId))
                 // We just broke the shader and there's no way to force existing objects back to fixed-function mode as we would when creating the shader.
                 // If we put a nullptr in the shader map, we just lose the ability to put a working one in later.
                 continue;
@@ -360,7 +374,7 @@ namespace Shader
 
     void ShaderManager::releaseGLObjects(osg::State *state)
     {
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mMutex);
+        std::lock_guard<std::mutex> lock(mMutex);
         for (auto shader : mShaders)
         {
             if (shader.second != nullptr)

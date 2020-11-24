@@ -1,8 +1,8 @@
 #include "shadervisitor.hpp"
 
-#include <osg/Texture>
-#include <osg/Material>
 #include <osg/Geometry>
+#include <osg/Material>
+#include <osg/Texture>
 
 #include <osgUtil/TangentSpaceGenerator>
 
@@ -39,12 +39,13 @@ namespace Shader
         , mAllowedToModifyStateSets(true)
         , mAutoUseNormalMaps(false)
         , mAutoUseSpecularMaps(false)
+        , mApplyLightingToEnvMaps(false)
         , mShaderManager(shaderManager)
         , mImageManager(imageManager)
         , mDefaultVsTemplate(defaultVsTemplate)
         , mDefaultFsTemplate(defaultFsTemplate)
     {
-        mRequirements.push_back(ShaderRequirements());
+        mRequirements.emplace_back();
     }
 
     void ShaderVisitor::setForceShaders(bool force)
@@ -75,7 +76,7 @@ namespace Shader
         return newStateSet.get();
     }
 
-    const char* defaultTextures[] = { "diffuseMap", "normalMap", "emissiveMap", "darkMap", "detailMap", "envMap", "specularMap", "decalMap" };
+    const char* defaultTextures[] = { "diffuseMap", "normalMap", "emissiveMap", "darkMap", "detailMap", "envMap", "specularMap", "decalMap", "bumpMap" };
     bool isTextureNameRecognized(const std::string& name)
     {
         for (unsigned int i=0; i<sizeof(defaultTextures)/sizeof(defaultTextures[0]); ++i)
@@ -95,6 +96,7 @@ namespace Shader
             const osg::Texture* diffuseMap = nullptr;
             const osg::Texture* normalMap = nullptr;
             const osg::Texture* specularMap = nullptr;
+            const osg::Texture* bumpMap = nullptr;
             for(unsigned int unit=0;unit<texAttributes.size();++unit)
             {
                 const osg::StateAttribute *attr = stateset->getTextureAttribute(unit, osg::StateAttribute::TEXTURE);
@@ -130,6 +132,19 @@ namespace Shader
                                 diffuseMap = texture;
                             else if (texName == "specularMap")
                                 specularMap = texture;
+                            else if (texName == "bumpMap")
+                            {
+                                bumpMap = texture;
+                                mRequirements.back().mShaderRequired = true;
+                                if (!writableStateSet)
+                                    writableStateSet = getWritableStateSet(node);
+                                // Bump maps are off by default as well
+                                writableStateSet->setTextureMode(unit, GL_TEXTURE_2D, osg::StateAttribute::ON);
+                            }
+                            else if (texName == "envMap" && mApplyLightingToEnvMaps)
+                            {
+                                mRequirements.back().mShaderRequired = true;
+                            }
                         }
                         else
                             Log(Debug::Error) << "ShaderVisitor encountered unknown texture " << texture;
@@ -158,8 +173,11 @@ namespace Shader
                         image = mImageManager.getImage(normalMapFileName);
                     }
                 }
+                // Avoid using the auto-detected normal map if it's already being used as a bump map.
+                // It's probably not an actual normal map.
+                bool hasNamesakeBumpMap = image && bumpMap && bumpMap->getImage(0) && image->getFileName() == bumpMap->getImage(0)->getFileName();
 
-                if (image)
+                if (!hasNamesakeBumpMap && image)
                 {
                     osg::ref_ptr<osg::Texture2D> normalMapTex (new osg::Texture2D(image));
                     normalMapTex->setTextureSize(image->s(), image->t());
@@ -209,6 +227,8 @@ namespace Shader
             {
                 if (!writableStateSet)
                     writableStateSet = getWritableStateSet(node);
+                // We probably shouldn't construct a new version of this each time as Uniforms use pointer comparison for early-out.
+                // Also it should probably belong to the shader manager or be applied by the shadows bin
                 writableStateSet->addUniform(new osg::Uniform("useDiffuseMapForShadowAlpha", true));
             }
         }
@@ -218,6 +238,7 @@ namespace Shader
         {
             if (it->first.first == osg::StateAttribute::MATERIAL)
             {
+                // This should probably be moved out of ShaderRequirements and be applied directly now it's a uniform instead of a define
                 if (!mRequirements.back().mMaterialOverridden || it->second.second & osg::StateAttribute::PROTECTED)
                 {
                     if (it->second.second & osg::StateAttribute::OVERRIDE)
@@ -234,21 +255,28 @@ namespace Shader
                     case osg::Material::OFF:
                         colorMode = 0;
                         break;
-                    case GL_AMBIENT:
-                        colorMode = 3;
+                    case osg::Material::EMISSION:
+                        colorMode = 1;
                         break;
                     default:
-                    case GL_AMBIENT_AND_DIFFUSE:
+                    case osg::Material::AMBIENT_AND_DIFFUSE:
                         colorMode = 2;
                         break;
-                    case GL_EMISSION:
-                        colorMode = 1;
+                    case osg::Material::AMBIENT:
+                        colorMode = 3;
+                        break;
+                    case osg::Material::DIFFUSE:
+                        colorMode = 4;
+                        break;
+                    case osg::Material::SPECULAR:
+                        colorMode = 5;
                         break;
                     }
 
                     mRequirements.back().mColorMode = colorMode;
                 }
             }
+            // Eventually, move alpha testing to discard in shader adn remove deprecated state here
         }
     }
 
@@ -419,6 +447,11 @@ namespace Shader
     void ShaderVisitor::setSpecularMapPattern(const std::string &pattern)
     {
         mSpecularMapPattern = pattern;
+    }
+
+    void ShaderVisitor::setApplyLightingToEnvMaps(bool apply)
+    {
+        mApplyLightingToEnvMaps = apply;
     }
 
 }

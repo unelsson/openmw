@@ -6,7 +6,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
-#include <components/bsa/bsa_file.hpp>
+#include <components/bsa/compressedbsafile.hpp>
+#include <components/misc/stringops.hpp>
 
 #define BSATOOL_VERSION 1.1
 
@@ -24,16 +25,6 @@ struct Arguments
     bool longformat;
     bool fullpath;
 };
-
-void replaceAll(std::string& str, const std::string& needle, const std::string& substitute)
-{
-    size_t pos = str.find(needle);
-    while(pos != std::string::npos)
-    {
-        str.replace(pos, needle.size(), substitute);
-        pos = str.find(needle);
-    }
-}
 
 bool parseOptions (int argc, char** argv, Arguments &info)
 {
@@ -144,9 +135,9 @@ bool parseOptions (int argc, char** argv, Arguments &info)
     return true;
 }
 
-int list(Bsa::BSAFile& bsa, Arguments& info);
-int extract(Bsa::BSAFile& bsa, Arguments& info);
-int extractAll(Bsa::BSAFile& bsa, Arguments& info);
+int list(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info);
+int extract(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info);
+int extractAll(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info);
 
 int main(int argc, char** argv)
 {
@@ -157,8 +148,16 @@ int main(int argc, char** argv)
             return 1;
 
         // Open file
-        Bsa::BSAFile bsa;
-        bsa.open(info.filename);
+        std::unique_ptr<Bsa::BSAFile> bsa;
+
+        Bsa::BsaVersion bsaVersion = Bsa::CompressedBSAFile::detectVersion(info.filename);
+
+        if (bsaVersion == Bsa::BSAVER_COMPRESSED)
+            bsa = std::make_unique<Bsa::CompressedBSAFile>(Bsa::CompressedBSAFile());
+        else
+            bsa = std::make_unique<Bsa::BSAFile>(Bsa::BSAFile());
+
+        bsa->open(info.filename);
 
         if (info.mode == "list")
             return list(bsa, info);
@@ -179,37 +178,37 @@ int main(int argc, char** argv)
     }
 }
 
-int list(Bsa::BSAFile& bsa, Arguments& info)
+int list(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info)
 {
     // List all files
-    const Bsa::BSAFile::FileList &files = bsa.getList();
-    for(unsigned int i=0; i<files.size(); i++)
+    const Bsa::BSAFile::FileList &files = bsa->getList();
+    for (const auto& file : files)
     {
         if(info.longformat)
         {
             // Long format
             std::ios::fmtflags f(std::cout.flags());
-            std::cout << std::setw(50) << std::left << files[i].name;
-            std::cout << std::setw(8) << std::left << std::dec << files[i].fileSize;
-            std::cout << "@ 0x" << std::hex << files[i].offset << std::endl;
+            std::cout << std::setw(50) << std::left << file.name;
+            std::cout << std::setw(8) << std::left << std::dec << file.fileSize;
+            std::cout << "@ 0x" << std::hex << file.offset << std::endl;
             std::cout.flags(f);
         }
         else
-            std::cout << files[i].name << std::endl;
+            std::cout << file.name << std::endl;
     }
 
     return 0;
 }
 
-int extract(Bsa::BSAFile& bsa, Arguments& info)
+int extract(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info)
 {
     std::string archivePath = info.extractfile;
-    replaceAll(archivePath, "/", "\\");
+    Misc::StringUtils::replaceAll(archivePath, "/", "\\");
 
     std::string extractPath = info.extractfile;
-    replaceAll(extractPath, "\\", "/");
+    Misc::StringUtils::replaceAll(extractPath, "\\", "/");
 
-    if (!bsa.exists(archivePath.c_str()))
+    if (!bsa->exists(archivePath.c_str()))
     {
         std::cout << "ERROR: file '" << archivePath << "' not found\n";
         std::cout << "In archive: " << info.filename << std::endl;
@@ -237,7 +236,7 @@ int extract(Bsa::BSAFile& bsa, Arguments& info)
     }
 
     // Get a stream for the file to extract
-    Files::IStreamPtr stream = bsa.getFile(archivePath.c_str());
+    Files::IStreamPtr stream = bsa->getFile(archivePath.c_str());
 
     bfs::ofstream out(target, std::ios::binary);
 
@@ -250,17 +249,12 @@ int extract(Bsa::BSAFile& bsa, Arguments& info)
     return 0;
 }
 
-int extractAll(Bsa::BSAFile& bsa, Arguments& info)
+int extractAll(std::unique_ptr<Bsa::BSAFile>& bsa, Arguments& info)
 {
-    // Get the list of files present in the archive
-    Bsa::BSAFile::FileList list = bsa.getList();
-
-    // Iter on the list
-    for(Bsa::BSAFile::FileList::iterator it = list.begin(); it != list.end(); ++it) {
-        const char* archivePath = it->name;
-
-        std::string extractPath (archivePath);
-        replaceAll(extractPath, "\\", "/");
+    for (const auto &file : bsa->getList())
+    {
+        std::string extractPath(file.name);
+        Misc::StringUtils::replaceAll(extractPath, "\\", "/");
 
         // Get the target path (the path the file will be extracted to)
         bfs::path target (info.outdir);
@@ -278,7 +272,7 @@ int extractAll(Bsa::BSAFile& bsa, Arguments& info)
 
         // Get a stream for the file to extract
         // (inefficient because getFile iter on the list again)
-        Files::IStreamPtr data = bsa.getFile(archivePath);
+        Files::IStreamPtr data = bsa->getFile(file.name);
         bfs::ofstream out(target, std::ios::binary);
 
         // Write the file to disk

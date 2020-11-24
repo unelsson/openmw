@@ -10,7 +10,10 @@ If you feel your name is missing from this list, please notify a developer.
 Programmers
 -----------
 
-    Marc Zinnschlag (Zini) - Lead Programmer/Project Manager
+    Bret Curtis (psi29a) - Project leader 2019-present
+    Marc Zinnschlag (Zini) - Project leader 2010-2018
+    Nicolay Korslund - Project leader 2008-2010
+    scrawl - Top contributor
 
     Adam Hogan (aurix)
     Aesylwinn
@@ -39,7 +42,6 @@ Programmers
     Austin Salgat (Salgat)
     Ben Shealy (bentsherman)
     Berulacks
-    Bret Curtis (psi29a)
     Britt Mathis (galdor557)
     Capostrophic
     Carl Maxwell
@@ -74,6 +76,7 @@ Programmers
     Fil Krynicki (filkry)
     Finbar Crago (finbar-crago)
     Florian Weber (Florianjw)
+    Frédéric Chardon (fr3dz10)
     Gaëtan Dezeiraud (Brouilles)
     Gašper Sedej
     Gijsbert ter Horst (Ghostbird)
@@ -87,11 +90,13 @@ Programmers
     Jacob Essex (Yacoby)
     Jake Westrip (16bitint)
     James Carty (MrTopCat)
+    James Moore (moore.work)
     James Stephens (james-h-stephens)
     Jan-Peter Nilsson (peppe)
     Jan Borsodi (am0s)
     Jason Hooks (jhooks)
     jeaye
+    jefetienne
     Jeffrey Haines (Jyby)
     Jengerer
     Jiří Kuneš (kunesj)
@@ -144,7 +149,6 @@ Programmers
     Nathan Jeffords (blunted2night)
     NeveHanter
     Nialsy
-    Nicolay Korslund
     Nikolay Kasyanov (corristo)
     nobrakal
     Nolan Poe (nopoe)
@@ -153,6 +157,7 @@ Programmers
     Paul McElroy (Greendogo)
     pchan3
     Perry Hugh
+    Petr Mikheev (ptmikheev)
     Phillip Andrews (PhillipAnd)
     Pi03k
     Pieter van der Kloet (pvdk)
@@ -172,7 +177,6 @@ Programmers
     Roman Siromakha (elsid)
     Sandy Carter (bwrsandman)
     Scott Howard (maqifrnswa)
-    scrawl
     Sebastian Wick (swick)
     Sergey Fukanchik
     Sergey Shambir (sergey-shambir)
@@ -299,4 +303,4 @@ Thanks to Kevin Ryan,
 for creating the icon used for the Data Files tab of the OpenMW Launcher.
 
 Thanks to DejaVu team,
-for their DejaVuLGCSansMono fontface, see DejaVu Font License.txt for their license terms.
+for their DejaVuLGCSansMono fontface, see DejaVuFontLicense.txt for their license terms.

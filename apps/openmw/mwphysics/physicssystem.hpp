@@ -1,22 +1,27 @@
 #ifndef OPENMW_MWPHYSICS_PHYSICSSYSTEM_H
 #define OPENMW_MWPHYSICS_PHYSICSSYSTEM_H
 
+#include <array>
 #include <memory>
 #include <map>
 #include <set>
 #include <algorithm>
 
 #include <osg/Quat>
+#include <osg/BoundingBox>
 #include <osg/ref_ptr>
+#include <osg/Timer>
 
 #include "../mwworld/ptr.hpp"
 
 #include "collisiontype.hpp"
+#include "raycasting.hpp"
 
 namespace osg
 {
     class Group;
     class Object;
+    class Stats;
 }
 
 namespace MWRender
@@ -41,23 +46,72 @@ class btDefaultCollisionConfiguration;
 class btCollisionDispatcher;
 class btCollisionObject;
 class btCollisionShape;
+class btVector3;
 
 namespace MWPhysics
 {
-    typedef std::vector<std::pair<MWWorld::Ptr,osg::Vec3f> > PtrVelocityList;
+    using PtrPositionList = std::map<MWWorld::Ptr, osg::Vec3f>;
 
     class HeightField;
     class Object;
     class Actor;
+    class PhysicsTaskScheduler;
 
-    static const float sMaxSlope = 49.0f;
-    static const float sStepSizeUp = 34.0f;
+    struct ContactPoint
+    {
+        MWWorld::Ptr mObject;
+        osg::Vec3f mPoint;
+        osg::Vec3f mNormal;
+    };
 
-    class PhysicsSystem
+    struct LOSRequest
+    {
+        LOSRequest(const std::weak_ptr<Actor>& a1, const std::weak_ptr<Actor>& a2);
+        std::array<std::weak_ptr<Actor>, 2> mActors;
+        std::array<const Actor*, 2> mRawActors;
+        bool mResult;
+        bool mStale;
+        int mAge;
+    };
+    bool operator==(const LOSRequest& lhs, const LOSRequest& rhs) noexcept;
+
+    struct ActorFrameData
+    {
+        ActorFrameData(const std::shared_ptr<Actor>& actor, const MWWorld::Ptr character, const MWWorld::Ptr standingOn, bool moveToWaterSurface, osg::Vec3f movement, float slowFall, float waterlevel);
+        std::weak_ptr<Actor> mActor;
+        Actor* mActorRaw;
+        MWWorld::Ptr mPtr;
+        MWWorld::Ptr mStandingOn;
+        bool mFlying;
+        bool mSwimming;
+        bool mWasOnGround;
+        bool mWantJump;
+        bool mDidJump;
+        bool mIsDead;
+        bool mNeedLand;
+        bool mMoveToWaterSurface;
+        float mWaterlevel;
+        float mSlowFall;
+        float mOldHeight;
+        float mFallHeight;
+        osg::Vec3f mMovement;
+        osg::Vec3f mOrigin;
+        osg::Vec3f mPosition;
+        ESM::Position mRefpos;
+    };
+
+    struct WorldFrameData
+    {
+        WorldFrameData();
+        bool mIsInStorm;
+        osg::Vec3f mStormDirection;
+    };
+
+    class PhysicsSystem : public RayCastingInterface
     {
         public:
             PhysicsSystem (Resource::ResourceSystem* resourceSystem, osg::ref_ptr<osg::Group> parentNode);
-            ~PhysicsSystem ();
+            virtual ~PhysicsSystem ();
 
             void setUnrefQueue(SceneUtil::UnrefQueue* unrefQueue);
 
@@ -93,41 +147,34 @@ namespace MWPhysics
 
             bool toggleCollisionMode();
 
-            void stepSimulation(float dt);
+            void stepSimulation();
             void debugDraw();
 
             std::vector<MWWorld::Ptr> getCollisions(const MWWorld::ConstPtr &ptr, int collisionGroup, int collisionMask) const; ///< get handles this object collides with
+            std::vector<ContactPoint> getCollisionsPoints(const MWWorld::ConstPtr &ptr, int collisionGroup, int collisionMask) const;
             osg::Vec3f traceDown(const MWWorld::Ptr &ptr, const osg::Vec3f& position, float maxHeight);
 
             std::pair<MWWorld::Ptr, osg::Vec3f> getHitContact(const MWWorld::ConstPtr& actor,
                                                                const osg::Vec3f &origin,
                                                                const osg::Quat &orientation,
-                                                               float queryDistance, std::vector<MWWorld::Ptr> targets = std::vector<MWWorld::Ptr>());
+                                                               float queryDistance, std::vector<MWWorld::Ptr>& targets);
 
 
             /// Get distance from \a point to the collision shape of \a target. Uses a raycast to find where the
             /// target vector hits the collision shape and then calculates distance from the intersection point.
             /// This can be used to find out how much nearer we need to move to the target for a "getHitContact" to be successful.
             /// \note Only Actor targets are supported at the moment.
-            float getHitDistance(const osg::Vec3f& point, const MWWorld::ConstPtr& target) const;
-
-            struct RayResult
-            {
-                bool mHit;
-                osg::Vec3f mHitPos;
-                osg::Vec3f mHitNormal;
-                MWWorld::Ptr mHitObject;
-            };
+            float getHitDistance(const osg::Vec3f& point, const MWWorld::ConstPtr& target) const override;
 
             /// @param me Optional, a Ptr to ignore in the list of results. targets are actors to filter for, ignoring all other actors.
-            RayResult castRay(const osg::Vec3f &from, const osg::Vec3f &to, const MWWorld::ConstPtr& ignore = MWWorld::ConstPtr(),
+            RayCastingResult castRay(const osg::Vec3f &from, const osg::Vec3f &to, const MWWorld::ConstPtr& ignore = MWWorld::ConstPtr(),
                     std::vector<MWWorld::Ptr> targets = std::vector<MWWorld::Ptr>(),
-                    int mask = CollisionType_World|CollisionType_HeightMap|CollisionType_Actor|CollisionType_Door, int group=0xff) const;
+                    int mask = CollisionType_World|CollisionType_HeightMap|CollisionType_Actor|CollisionType_Door, int group=0xff) const override;
 
-            RayResult castSphere(const osg::Vec3f& from, const osg::Vec3f& to, float radius);
+            RayCastingResult castSphere(const osg::Vec3f& from, const osg::Vec3f& to, float radius) const override;
 
             /// Return true if actor1 can see actor2.
-            bool getLineOfSight(const MWWorld::ConstPtr& actor1, const MWWorld::ConstPtr& actor2) const;
+            bool getLineOfSight(const MWWorld::ConstPtr& actor1, const MWWorld::ConstPtr& actor2) const override;
 
             bool isOnGround (const MWWorld::Ptr& actor);
 
@@ -146,12 +193,15 @@ namespace MWPhysics
             /// @note The collision shape's origin is in its center, so the position returned can be described as center of the actor collision box in world space.
             osg::Vec3f getCollisionObjectPosition(const MWWorld::ConstPtr& actor) const;
 
+            /// Get bounding box in world space of the given object.
+            osg::BoundingBox getBoundingBox(const MWWorld::ConstPtr &object) const;
+
             /// Queues velocity movement for a Ptr. If a Ptr is already queued, its velocity will
             /// be overwritten. Valid until the next call to applyQueuedMovement.
             void queueObjectMovement(const MWWorld::Ptr &ptr, const osg::Vec3f &velocity);
 
             /// Apply all queued movements, then clear the list.
-            const PtrVelocityList& applyQueuedMovement(float dt);
+            const PtrPositionList& applyQueuedMovement(float dt, bool skipSimulation, osg::Timer_t frameStart, unsigned int frameNumber, osg::Stats& stats);
 
             /// Clear the queued movements list without applying.
             void clearQueuedMovement();
@@ -187,43 +237,43 @@ namespace MWPhysics
                 std::for_each(mAnimatedObjects.begin(), mAnimatedObjects.end(), function);
             }
 
+            bool isAreaOccupiedByOtherActor(const osg::Vec3f& position, const float radius, const MWWorld::ConstPtr& ignore) const;
+
+            void reportStats(unsigned int frameNumber, osg::Stats& stats) const;
+            void reportCollision(const btVector3& position, const btVector3& normal);
+
         private:
 
             void updateWater();
 
+            std::vector<ActorFrameData> prepareFrameData(int numSteps);
+
             osg::ref_ptr<SceneUtil::UnrefQueue> mUnrefQueue;
 
-            btBroadphaseInterface* mBroadphase;
-            btDefaultCollisionConfiguration* mCollisionConfiguration;
-            btCollisionDispatcher* mDispatcher;
-            btCollisionWorld* mCollisionWorld;
+            std::unique_ptr<btBroadphaseInterface> mBroadphase;
+            std::unique_ptr<btDefaultCollisionConfiguration> mCollisionConfiguration;
+            std::unique_ptr<btCollisionDispatcher> mDispatcher;
+            std::shared_ptr<btCollisionWorld> mCollisionWorld;
+            std::unique_ptr<PhysicsTaskScheduler> mTaskScheduler;
 
             std::unique_ptr<Resource::BulletShapeManager> mShapeManager;
             Resource::ResourceSystem* mResourceSystem;
 
-            typedef std::map<MWWorld::ConstPtr, Object*> ObjectMap;
+            using ObjectMap = std::map<MWWorld::ConstPtr, std::shared_ptr<Object>>;
             ObjectMap mObjects;
 
             std::set<Object*> mAnimatedObjects; // stores pointers to elements in mObjects
 
-            typedef std::map<MWWorld::ConstPtr, Actor*> ActorMap;
+            using ActorMap = std::map<MWWorld::ConstPtr, std::shared_ptr<Actor>>;
             ActorMap mActors;
 
-            typedef std::map<std::pair<int, int>, HeightField*> HeightFieldMap;
+            using HeightFieldMap = std::map<std::pair<int, int>, HeightField *>;
             HeightFieldMap mHeightFields;
 
             bool mDebugDrawEnabled;
 
-            // Tracks standing collisions happening during a single frame. <actor handle, collided handle>
-            // This will detect standing on an object, but won't detect running e.g. against a wall.
-            typedef std::map<MWWorld::Ptr, MWWorld::Ptr> CollisionMap;
-            CollisionMap mStandingCollisions;
-
-            // replaces all occurrences of 'old' in the map by 'updated', no matter if it's a key or value
-            void updateCollisionMapPtr(CollisionMap& map, const MWWorld::Ptr &old, const MWWorld::Ptr &updated);
-
+            using PtrVelocityList = std::vector<std::pair<MWWorld::Ptr, osg::Vec3f>>;
             PtrVelocityList mMovementQueue;
-            PtrVelocityList mMovementResults;
 
             float mTimeAccum;
 

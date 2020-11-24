@@ -18,7 +18,7 @@
 #include "../mwworld/esmstore.hpp"
 #include "../mwworld/player.hpp"
 
-#include "../mwmechanics/spellcasting.hpp"
+#include "../mwmechanics/spellutil.hpp"
 #include "../mwmechanics/spells.hpp"
 #include "../mwmechanics/creaturestats.hpp"
 #include "../mwmechanics/actorutil.hpp"
@@ -241,8 +241,9 @@ namespace MWGui
         if (MWBase::Environment::get().getMechanicsManager()->isAttackingOrSpell(player))
             return;
 
+        bool godmode = MWBase::Environment::get().getWorld()->getGodModeState();
         const MWMechanics::CreatureStats &stats = player.getClass().getCreatureStats(player);
-        if (stats.isParalyzed() || stats.getKnockedDown() || stats.isDead() || stats.getHitRecovery())
+        if ((!godmode && stats.isParalyzed()) || stats.getKnockedDown() || stats.isDead() || stats.getHitRecovery())
             return;
 
         mSpellView->setModel(new SpellModel(MWMechanics::getPlayer(), ""));

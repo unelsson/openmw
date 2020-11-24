@@ -130,7 +130,10 @@ void ESM::CellRef::loadData(ESMReader &esm, bool &isDeleted)
     }
 
     if (mLockLevel == 0 && !mKey.empty())
+    {
         mLockLevel = UnbreakableLock;
+        mTrap.clear();
+    }
 }
 
 void ESM::CellRef::save (ESMWriter &esm, bool wideRefNum, bool inInventory, bool isDeleted) const
@@ -153,13 +156,19 @@ void ESM::CellRef::save (ESMWriter &esm, bool wideRefNum, bool inInventory, bool
         esm.writeHNT("XSCL", scale);
     }
 
-    esm.writeHNOCString("ANAM", mOwner);
+    if (!inInventory)
+        esm.writeHNOCString("ANAM", mOwner);
+
     esm.writeHNOCString("BNAM", mGlobalVariable);
     esm.writeHNOCString("XSOL", mSoul);
 
-    esm.writeHNOCString("CNAM", mFaction);
-    if (mFactionRank != -2) {
-        esm.writeHNT("INDX", mFactionRank);
+    if (!inInventory)
+    {
+        esm.writeHNOCString("CNAM", mFaction);
+        if (mFactionRank != -2)
+        {
+            esm.writeHNT("INDX", mFactionRank);
+        }
     }
 
     if (mEnchantmentCharge != -1)
@@ -222,20 +231,4 @@ void ESM::CellRef::blank()
         mPos.pos[i] = 0;
         mPos.rot[i] = 0;
     }
-}
-
-bool ESM::operator== (const RefNum& left, const RefNum& right)
-{
-    return left.mIndex==right.mIndex && left.mContentFile==right.mContentFile;
-}
-
-bool ESM::operator< (const RefNum& left, const RefNum& right)
-{
-    if (left.mIndex<right.mIndex)
-        return true;
-
-    if (left.mIndex>right.mIndex)
-        return false;
-
-    return left.mContentFile<right.mContentFile;
 }

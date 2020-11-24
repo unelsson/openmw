@@ -27,8 +27,8 @@ namespace CSVTools
 
             RichTextDelegate (QObject *parent = 0);
 
-            virtual void paint(QPainter *painter, const QStyleOptionViewItem& option,
-                const QModelIndex& index) const;
+            void paint(QPainter *painter, const QStyleOptionViewItem& option,
+                const QModelIndex& index) const override;
     };
 }
 
@@ -144,11 +144,7 @@ CSVTools::ReportTable::ReportTable (CSMDoc::Document& document,
 : CSVWorld::DragRecordTable (document, parent), mModel (document.getReport (id)),
   mRefreshAction (0), mRefreshState (refreshState)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     horizontalHeader()->setSectionResizeMode (QHeaderView::Interactive);
-#else
-    horizontalHeader()->setResizeMode (QHeaderView::Interactive);
-#endif
     horizontalHeader()->setStretchLastSection (true);
     verticalHeader()->hide();
     setSortingEnabled (true);
@@ -277,7 +273,7 @@ void CSVTools::ReportTable::settingChanged (const CSMPrefs::Setting *setting)
         if (key.startsWith (base))
         {
             QString modifierString = key.mid (base.size());
-            Qt::KeyboardModifiers modifiers = 0;
+            Qt::KeyboardModifiers modifiers;
 
             if (modifierString=="-s")
                 modifiers = Qt::ShiftModifier;

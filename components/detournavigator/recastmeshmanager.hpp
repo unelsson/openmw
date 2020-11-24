@@ -9,11 +9,10 @@
 
 #include <osg/Vec2i>
 
-#include <boost/optional.hpp>
-
-#include <map>
-#include <unordered_map>
 #include <list>
+#include <map>
+#include <optional>
+#include <unordered_map>
 
 class btCollisionShape;
 
@@ -34,7 +33,7 @@ namespace DetourNavigator
             btTransform mTransform;
         };
 
-        RecastMeshManager(const Settings& settings, const TileBounds& bounds);
+        RecastMeshManager(const Settings& settings, const TileBounds& bounds, std::size_t generation);
 
         bool addObject(const ObjectId id, const btCollisionShape& shape, const btTransform& transform,
                        const AreaType areaType);
@@ -43,16 +42,18 @@ namespace DetourNavigator
 
         bool addWater(const osg::Vec2i& cellPosition, const int cellSize, const btTransform& transform);
 
-        boost::optional<Water> removeWater(const osg::Vec2i& cellPosition);
+        std::optional<Water> removeWater(const osg::Vec2i& cellPosition);
 
-        boost::optional<RemovedRecastMeshObject> removeObject(const ObjectId id);
+        std::optional<RemovedRecastMeshObject> removeObject(const ObjectId id);
 
         std::shared_ptr<RecastMesh> getMesh();
 
         bool isEmpty() const;
 
     private:
-        bool mShouldRebuild;
+        std::size_t mRevision = 0;
+        std::size_t mLastBuildRevision = 0;
+        std::size_t mGeneration;
         RecastMeshBuilder mMeshBuilder;
         std::list<RecastMeshObject> mObjectsOrder;
         std::unordered_map<ObjectId, std::list<RecastMeshObject>::iterator> mObjects;

@@ -57,9 +57,6 @@ CSVWidget::BrushSizeControls::BrushSizeControls(const QString &title, QWidget *p
 
 CSVWidget::TextureBrushWindow::TextureBrushWindow(CSMDoc::Document& document, QWidget *parent)
     : QFrame(parent, Qt::Popup),
-    mBrushShape(0),
-    mBrushSize(1),
-    mBrushTexture("L0#0"),
     mDocument(document)
 {
     mBrushTextureLabel = "Selected texture: " + mBrushTexture + " ";
@@ -207,10 +204,14 @@ void CSVWidget::TextureBrushWindow::setBrushSize(int brushSize)
 
 void CSVWidget::TextureBrushWindow::setBrushShape()
 {
-    if(mButtonPoint->isChecked()) mBrushShape = 0;
-    if(mButtonSquare->isChecked()) mBrushShape = 1;
-    if(mButtonCircle->isChecked()) mBrushShape = 2;
-    if(mButtonCustom->isChecked()) mBrushShape = 3;
+    if (mButtonPoint->isChecked())
+        mBrushShape = CSVWidget::BrushShape_Point;
+    if (mButtonSquare->isChecked())
+        mBrushShape = CSVWidget::BrushShape_Square;
+    if (mButtonCircle->isChecked())
+        mBrushShape = CSVWidget::BrushShape_Circle;
+    if (mButtonCustom->isChecked())
+        mBrushShape = CSVWidget::BrushShape_Custom;
     emit passBrushShape(mBrushShape);
 }
 
@@ -228,7 +229,7 @@ CSVWidget::SceneToolTextureBrush::SceneToolTextureBrush (SceneToolbar *parent, c
     mBrushHistory[0] = "L0#0";
 
     setAcceptDrops(true);
-    connect(mTextureBrushWindow, SIGNAL(passBrushShape(int)), this, SLOT(setButtonIcon(int)));
+    connect(mTextureBrushWindow, SIGNAL(passBrushShape(CSVWidget::BrushShape)), this, SLOT(setButtonIcon(CSVWidget::BrushShape)));
     setButtonIcon(mTextureBrushWindow->mBrushShape);
 
     mPanel = new QFrame (this, Qt::Popup);
@@ -242,13 +243,8 @@ CSVWidget::SceneToolTextureBrush::SceneToolTextureBrush (SceneToolbar *parent, c
     mTable->setShowGrid (true);
     mTable->verticalHeader()->hide();
     mTable->horizontalHeader()->hide();
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     mTable->horizontalHeader()->setSectionResizeMode (0, QHeaderView::Stretch);
     mTable->horizontalHeader()->setSectionResizeMode (1, QHeaderView::Stretch);
-#else
-    mTable->horizontalHeader()->setResizeMode (0, QHeaderView::Stretch);
-    mTable->horizontalHeader()->setResizeMode (1, QHeaderView::Stretch);
-#endif
     mTable->setSelectionMode (QAbstractItemView::NoSelection);
 
     layout->addWidget (mTable);
@@ -258,31 +254,31 @@ CSVWidget::SceneToolTextureBrush::SceneToolTextureBrush (SceneToolbar *parent, c
 
 }
 
-void CSVWidget::SceneToolTextureBrush::setButtonIcon (int brushShape)
+void CSVWidget::SceneToolTextureBrush::setButtonIcon (CSVWidget::BrushShape brushShape)
 {
     QString tooltip = "Change brush settings <p>Currently selected: ";
 
     switch (brushShape)
     {
-        case 0:
+        case BrushShape_Point:
 
             setIcon (QIcon (QPixmap (":scenetoolbar/brush-point")));
             tooltip += mTextureBrushWindow->toolTipPoint;
             break;
 
-        case 1:
+        case BrushShape_Square:
 
             setIcon (QIcon (QPixmap (":scenetoolbar/brush-square")));
             tooltip += mTextureBrushWindow->toolTipSquare;
             break;
 
-        case 2:
+        case BrushShape_Circle:
 
             setIcon (QIcon (QPixmap (":scenetoolbar/brush-circle")));
             tooltip += mTextureBrushWindow->toolTipCircle;
             break;
 
-        case 3:
+        case BrushShape_Custom:
 
             setIcon (QIcon (QPixmap (":scenetoolbar/brush-custom")));
             tooltip += mTextureBrushWindow->toolTipCustom;

@@ -468,7 +468,7 @@ MWMechanics::Alchemy::TEffectsIterator MWMechanics::Alchemy::endEffects() const
 
 bool MWMechanics::Alchemy::knownEffect(unsigned int potionEffectIndex, const MWWorld::Ptr &npc)
 {
-    int alchemySkill = npc.getClass().getSkill (npc, ESM::Skill::Alchemy);
+    float alchemySkill = npc.getClass().getSkill (npc, ESM::Skill::Alchemy);
     static const float fWortChanceValue =
             MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>().find("fWortChanceValue")->mValue.getFloat();
     return (potionEffectIndex <= 1 && alchemySkill >= fWortChanceValue)
@@ -553,4 +553,38 @@ std::string MWMechanics::Alchemy::suggestPotionName()
     int effectId = effects.begin()->mId;
     return MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>().find(
                 ESM::MagicEffect::effectIdToString(effectId))->mValue.getString();
+}
+
+std::vector<std::string> MWMechanics::Alchemy::effectsDescription (const MWWorld::ConstPtr &ptr, const int alchemySkill)
+{
+    std::vector<std::string> effects;
+
+    const auto& item = ptr.get<ESM::Ingredient>()->mBase;
+    const auto& gmst = MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>();
+    const static auto fWortChanceValue = gmst.find("fWortChanceValue")->mValue.getFloat();
+    const auto& data = item->mData;
+
+    for (auto i = 0; i < 4; ++i)
+    {
+        const auto effectID = data.mEffectID[i];
+        const auto skillID = data.mSkills[i];
+        const auto attributeID = data.mAttributes[i];
+
+        if (alchemySkill < fWortChanceValue * (i + 1))
+            break;
+
+        if (effectID != -1)
+        {
+            std::string effect = gmst.find(ESM::MagicEffect::effectIdToString(effectID))->mValue.getString();
+
+            if (skillID != -1)
+                effect += " " + gmst.find(ESM::Skill::sSkillNameIds[skillID])->mValue.getString();
+            else if (attributeID != -1)
+                effect += " " + gmst.find(ESM::Attribute::sGmstAttributeIds[attributeID])->mValue.getString();
+
+            effects.push_back(effect);
+
+        }
+    }
+    return effects;
 }

@@ -3,7 +3,6 @@
 #include <components/esm/loaddoor.hpp>
 #include <components/esm/doorstate.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
-#include <components/sceneutil/vismask.hpp>
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
@@ -26,6 +25,7 @@
 #include "../mwrender/objects.hpp"
 #include "../mwrender/renderinginterface.hpp"
 #include "../mwrender/animation.hpp"
+#include "../mwrender/vismask.hpp"
 
 #include "../mwmechanics/actorutil.hpp"
 
@@ -36,13 +36,13 @@ namespace MWClass
     public:
         MWWorld::DoorState mDoorState = MWWorld::DoorState::Idle;
 
-        virtual MWWorld::CustomData *clone() const;
+        MWWorld::CustomData *clone() const override;
 
-        virtual DoorCustomData& asDoorCustomData()
+        DoorCustomData& asDoorCustomData() override
         {
             return *this;
         }
-        virtual const DoorCustomData& asDoorCustomData() const
+        const DoorCustomData& asDoorCustomData() const override
         {
             return *this;
         }
@@ -58,7 +58,7 @@ namespace MWClass
         if (!model.empty())
         {
             renderingInterface.getObjects().insertModel(ptr, model, true);
-            ptr.getRefData().getBaseNode()->setNodeMask(SceneUtil::Mask_Static);
+            ptr.getRefData().getBaseNode()->setNodeMask(MWRender::Mask_Static);
         }
     }
 
@@ -158,12 +158,11 @@ namespace MWClass
             }
         }
 
-        if ((isLocked || isTrapped) && hasKey)
+        if (isLocked && hasKey)
         {
             if(actor == MWMechanics::getPlayer())
                 MWBase::Environment::get().getWindowManager()->messageBox(keyName + " #{sKeyUsed}");
-            if(isLocked)
-                ptr.getCellRef().unlock(); //Call the function here. because that makes sense.
+            ptr.getCellRef().unlock(); //Call the function here. because that makes sense.
             // using a key disarms the trap
             if(isTrapped)
             {
@@ -370,11 +369,11 @@ namespace MWClass
     {
         if (!state.mHasCustomState)
             return;
+
         ensureCustomData(ptr);
         DoorCustomData& customData = ptr.getRefData().getCustomData()->asDoorCustomData();
-
-        const ESM::DoorState& state2 = dynamic_cast<const ESM::DoorState&>(state);
-        customData.mDoorState = static_cast<MWWorld::DoorState>(state2.mDoorState);
+        const ESM::DoorState& doorState = state.asDoorState();
+        customData.mDoorState = MWWorld::DoorState(doorState.mDoorState);
     }
 
     void Door::writeAdditionalState (const MWWorld::ConstPtr& ptr, ESM::ObjectState& state) const
@@ -384,10 +383,10 @@ namespace MWClass
             state.mHasCustomState = false;
             return;
         }
-        const DoorCustomData& customData = ptr.getRefData().getCustomData()->asDoorCustomData();
 
-        ESM::DoorState& state2 = dynamic_cast<ESM::DoorState&>(state);
-        state2.mDoorState = static_cast<int>(customData.mDoorState);
+        const DoorCustomData& customData = ptr.getRefData().getCustomData()->asDoorCustomData();
+        ESM::DoorState& doorState = state.asDoorState();
+        doorState.mDoorState = int(customData.mDoorState);
     }
 
 }

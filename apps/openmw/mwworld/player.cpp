@@ -20,7 +20,7 @@
 
 #include "../mwmechanics/movement.hpp"
 #include "../mwmechanics/npcstats.hpp"
-#include "../mwmechanics/spellcasting.hpp"
+#include "../mwmechanics/spellutil.hpp"
 
 #include "class.hpp"
 #include "ptr.hpp"
@@ -230,7 +230,8 @@ namespace MWWorld
 
         MWWorld::Ptr player = getPlayer();
         const MWMechanics::NpcStats &playerStats = player.getClass().getNpcStats(player);
-        if (playerStats.isParalyzed() || playerStats.getKnockedDown() || playerStats.isDead())
+        bool godmode = MWBase::Environment::get().getWorld()->getGodModeState();
+        if ((!godmode && playerStats.isParalyzed()) || playerStats.getKnockedDown() || playerStats.isDead())
             return;
 
         MWWorld::Ptr toActivate = MWBase::Environment::get().getWorld()->getFacedObject();
@@ -356,8 +357,6 @@ namespace MWWorld
         else
             player.mHasMark = false;
 
-        player.mAutoMove = mAutoMove ? 1 : 0;
-
         for (int i=0; i<ESM::Attribute::Length; ++i)
             mSaveAttributes[i].writeState(player.mSaveAttributes[i]);
         for (int i=0; i<ESM::Skill::Length; ++i)
@@ -451,8 +450,6 @@ namespace MWWorld
             {
                 mMarkedCell = 0;
             }
-
-            mAutoMove = player.mAutoMove!=0;
 
             mForwardBackward = 0;
             mTeleported = false;

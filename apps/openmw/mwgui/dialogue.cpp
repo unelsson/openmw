@@ -41,7 +41,7 @@ namespace MWGui
 
         }
 
-        void addResponse(const std::string& title, const std::string& text)
+        void addResponse(const std::string& title, const std::string& text) override
         {
             mWindow->addResponse(title, text, mNeedMargin);
         }
@@ -339,6 +339,7 @@ namespace MWGui
 
         mTopicsList->adjustSize();
         updateHistory();
+        updateTopicFormat();
         mCurrentWindowSize = _sender->getSize();
     }
 
@@ -354,12 +355,16 @@ namespace MWGui
     void DialogueWindow::onByeClicked(MyGUI::Widget* _sender)
     {
         if (exit())
+        {
             MWBase::Environment::get().getWindowManager()->removeGuiMode(GM_Dialogue);
+        }
     }
 
     void DialogueWindow::onSelectListItem(const std::string& topic, int id)
     {
-        if (mGoodbye ||  MWBase::Environment::get().getDialogueManager()->isInChoice())
+        MWBase::DialogueManager* dialogueManager = MWBase::Environment::get().getDialogueManager();
+
+        if (mGoodbye || dialogueManager->isInChoice())
             return;
 
         const MWWorld::Store<ESM::GameSetting> &gmst = MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>();
@@ -386,21 +391,21 @@ namespace MWGui
             mPersuasionDialog.setVisible(true);
         else if (topic == sCompanionShare)
             MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_Companion, mPtr);
-        else if (!MWBase::Environment::get().getDialogueManager()->checkServiceRefused(mCallback.get()))
+        else if (!dialogueManager->checkServiceRefused(mCallback.get()))
         {
-            if (topic == sBarter)
+            if (topic == sBarter && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Barter))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_Barter, mPtr);
-            else if (topic == sSpells)
+            else if (topic == sSpells && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Spells))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_SpellBuying, mPtr);
-            else if (topic == sTravel)
+            else if (topic == sTravel && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Travel))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_Travel, mPtr);
-            else if (topic == sSpellMakingMenuTitle)
+            else if (topic == sSpellMakingMenuTitle && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Spellmaking))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_SpellCreation, mPtr);
-            else if (topic == sEnchanting)
+            else if (topic == sEnchanting && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Enchanting))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_Enchanting, mPtr);
-            else if (topic == sServiceTrainingTitle)
+            else if (topic == sServiceTrainingTitle && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Training))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_Training, mPtr);
-            else if (topic == sRepair)
+            else if (topic == sRepair && !dialogueManager->checkServiceRefused(mCallback.get(), MWBase::DialogueManager::Repair))
                 MWBase::Environment::get().getWindowManager()->pushGuiMode(GM_MerchantRepair, mPtr);
         }
         else
@@ -418,9 +423,7 @@ namespace MWGui
         bool sameActor = (mPtr == actor);
         if (!sameActor)
         {
-            for (DialogueText* text : mHistoryContents)
-                delete text;
-            mHistoryContents.clear();
+            // The history is not reset here
             mKeywords.clear();
             mTopicsList->clear();
             for (Link* link : mLinks)
@@ -448,7 +451,6 @@ namespace MWGui
         setTitle(mPtr.getClass().getName(mPtr));
 
         updateTopics();
-        updateTopicsPane(); // force update for new services
 
         updateDisposition();
         restock();
@@ -475,14 +477,22 @@ namespace MWGui
         mDeleteLater.clear();
     }
 
+    void DialogueWindow::onClose()
+    {
+        if (MWBase::Environment::get().getWindowManager()->containsMode(GM_Dialogue))
+            return;
+        // Reset history
+        for (DialogueText* text : mHistoryContents)
+            delete text;
+        mHistoryContents.clear();
+    }
+
     void DialogueWindow::setKeywords(std::list<std::string> keyWords)
     {
         if (mKeywords == keyWords && isCompanion() == mIsCompanion)
             return;
         mIsCompanion = isCompanion();
         mKeywords = keyWords;
-
-        updateTopicsPane();
     }
 
     void DialogueWindow::updateTopicsPane()
@@ -532,15 +542,16 @@ namespace MWGui
             mTopicsList->addSeparator();
 
 
-        for(std::string& keyword : mKeywords)
+        for(const auto& keyword : mKeywords)
         {
+            std::string topicId = Misc::StringUtils::lowerCase(keyword);
             mTopicsList->addItem(keyword);
 
             Topic* t = new Topic(keyword);
             t->eventTopicActivated += MyGUI::newDelegate(this, &DialogueWindow::onTopicActivated);
-            mTopicLinks[Misc::StringUtils::lowerCase(keyword)] = t;
+            mTopicLinks[topicId] = t;
 
-            mKeywordSearch.seed(Misc::StringUtils::lowerCase(keyword), intptr_t(t));
+            mKeywordSearch.seed(topicId, intptr_t(t));
         }
         mTopicsList->adjustSize();
 
@@ -669,7 +680,6 @@ namespace MWGui
     {
         mHistoryContents.push_back(new Response(text, title, needMargin));
         updateHistory();
-        updateTopics();
     }
 
     void DialogueWindow::addMessageBox(const std::string& text)
@@ -726,9 +736,31 @@ namespace MWGui
             updateHistory();
     }
 
+    void DialogueWindow::updateTopicFormat()
+    {
+        if (!Settings::Manager::getBool("color topic enable", "GUI"))
+            return;
+
+        std::string specialColour = Settings::Manager::getString("color topic specific", "GUI");
+        std::string oldColour = Settings::Manager::getString("color topic exhausted", "GUI");
+
+        for (const std::string& keyword : mKeywords)
+        {
+            int flag = MWBase::Environment::get().getDialogueManager()->getTopicFlag(keyword);
+            MyGUI::Button* button = mTopicsList->getItemWidget(keyword);
+
+            if (!specialColour.empty() && flag & MWBase::DialogueManager::TopicType::Specific)
+                button->getSubWidgetText()->setTextColour(MyGUI::Colour::parse(specialColour));
+            else if (!oldColour.empty() && flag & MWBase::DialogueManager::TopicType::Exhausted)
+                button->getSubWidgetText()->setTextColour(MyGUI::Colour::parse(oldColour));
+        }
+    }
+
     void DialogueWindow::updateTopics()
     {
         setKeywords(MWBase::Environment::get().getDialogueManager()->getAvailableTopics());
+        updateTopicsPane();
+        updateTopicFormat();
     }
 
     bool DialogueWindow::isCompanion()

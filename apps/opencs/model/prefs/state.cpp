@@ -271,6 +271,8 @@ void CSMPrefs::State::declare()
     declareShortcut ("document-file-newaddon", "New Addon", QKeySequence());
     declareShortcut ("document-file-open", "Open", QKeySequence(Qt::ControlModifier | Qt::Key_O));
     declareShortcut ("document-file-save", "Save", QKeySequence(Qt::ControlModifier | Qt::Key_S));
+    declareShortcut ("document-help-help", "Help", QKeySequence(Qt::Key_F1));
+    declareShortcut ("document-help-tutorial", "Tutorial", QKeySequence());
     declareShortcut ("document-file-verify", "Verify", QKeySequence());
     declareShortcut ("document-file-merge", "Merge", QKeySequence());
     declareShortcut ("document-file-errorlog", "Open Load Error Log", QKeySequence());
@@ -356,6 +358,10 @@ void CSMPrefs::State::declare()
         QKeySequence(Qt::ControlModifier | (int)Qt::MiddleButton));
     declareModifier ("scene-speed-modifier", "Speed Modifier", Qt::Key_Shift);
     declareShortcut ("scene-delete", "Delete Instance", QKeySequence(Qt::Key_Delete));
+    declareShortcut ("scene-instance-drop-terrain", "Drop to terrain level", QKeySequence(Qt::Key_G));
+    declareShortcut ("scene-instance-drop-collision", "Drop to collision", QKeySequence(Qt::Key_H));
+    declareShortcut ("scene-instance-drop-terrain-separately", "Drop to terrain level separately", QKeySequence());
+    declareShortcut ("scene-instance-drop-collision-separately", "Drop to collision separately", QKeySequence());
     declareShortcut ("scene-load-cam-cell", "Load Camera Cell", QKeySequence(Qt::KeypadModifier | Qt::Key_5));
     declareShortcut ("scene-load-cam-eastcell", "Load East Cell", QKeySequence(Qt::KeypadModifier | Qt::Key_6));
     declareShortcut ("scene-load-cam-northcell", "Load North Cell", QKeySequence(Qt::KeypadModifier | Qt::Key_8));

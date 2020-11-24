@@ -31,49 +31,12 @@ namespace DetourNavigator
         return result;
     }
 
-    std::vector<TilePosition> TileCachedRecastMeshManager::updateObject(const ObjectId id, const btCollisionShape& shape,
-        const btTransform& transform, const AreaType areaType)
+    std::optional<RemovedRecastMeshObject> TileCachedRecastMeshManager::removeObject(const ObjectId id)
     {
         const auto object = mObjectsTilesPositions.find(id);
         if (object == mObjectsTilesPositions.end())
-            return std::vector<TilePosition>();
-        auto& currentTiles = object->second;
-        const auto border = getBorderSize(mSettings);
-        std::vector<TilePosition> changedTiles;
-        std::set<TilePosition> newTiles;
-        {
-            auto tiles = mTiles.lock();
-            const auto onTilePosition = [&] (const TilePosition& tilePosition)
-            {
-                if (currentTiles.count(tilePosition))
-                {
-                    newTiles.insert(tilePosition);
-                    if (updateTile(id, transform, areaType, tilePosition, tiles.get()))
-                        changedTiles.push_back(tilePosition);
-                }
-                else if (addTile(id, shape, transform, areaType, tilePosition, border, tiles.get()))
-                {
-                    newTiles.insert(tilePosition);
-                    changedTiles.push_back(tilePosition);
-                }
-            };
-            getTilesPositions(shape, transform, mSettings, onTilePosition);
-            for (const auto& tile : currentTiles)
-                if (!newTiles.count(tile) && removeTile(id, tile, tiles.get()))
-                    changedTiles.push_back(tile);
-        }
-        std::swap(currentTiles, newTiles);
-        if (!changedTiles.empty())
-            ++mRevision;
-        return changedTiles;
-    }
-
-    boost::optional<RemovedRecastMeshObject> TileCachedRecastMeshManager::removeObject(const ObjectId id)
-    {
-        const auto object = mObjectsTilesPositions.find(id);
-        if (object == mObjectsTilesPositions.end())
-            return boost::none;
-        boost::optional<RemovedRecastMeshObject> result;
+            return std::nullopt;
+        std::optional<RemovedRecastMeshObject> result;
         {
             auto tiles = mTiles.lock();
             for (const auto& tilePosition : object->second)
@@ -121,7 +84,7 @@ namespace DetourNavigator
                         tileBounds.mMin -= osg::Vec2f(border, border);
                         tileBounds.mMax += osg::Vec2f(border, border);
                         tile = tiles->insert(std::make_pair(tilePosition,
-                                CachedRecastMeshManager(mSettings, tileBounds))).first;
+                                CachedRecastMeshManager(mSettings, tileBounds, mTilesGeneration))).first;
                     }
                     if (tile->second.addWater(cellPosition, cellSize, transform))
                     {
@@ -137,12 +100,12 @@ namespace DetourNavigator
         return result;
     }
 
-    boost::optional<RecastMeshManager::Water> TileCachedRecastMeshManager::removeWater(const osg::Vec2i& cellPosition)
+    std::optional<RecastMeshManager::Water> TileCachedRecastMeshManager::removeWater(const osg::Vec2i& cellPosition)
     {
         const auto object = mWaterTilesPositions.find(cellPosition);
         if (object == mWaterTilesPositions.end())
-            return boost::none;
-        boost::optional<RecastMeshManager::Water> result;
+            return std::nullopt;
+        std::optional<RecastMeshManager::Water> result;
         for (const auto& tilePosition : object->second)
         {
             const auto tiles = mTiles.lock();
@@ -151,7 +114,10 @@ namespace DetourNavigator
                 continue;
             const auto tileResult = tile->second.removeWater(cellPosition);
             if (tile->second.isEmpty())
+            {
                 tiles->erase(tile);
+                ++mTilesGeneration;
+            }
             if (tileResult && !result)
                 result = tileResult;
         }
@@ -189,7 +155,8 @@ namespace DetourNavigator
             auto tileBounds = makeTileBounds(mSettings, tilePosition);
             tileBounds.mMin -= osg::Vec2f(border, border);
             tileBounds.mMax += osg::Vec2f(border, border);
-            tile = tiles.insert(std::make_pair(tilePosition, CachedRecastMeshManager(mSettings, tileBounds))).first;
+            tile = tiles.insert(std::make_pair(
+                tilePosition, CachedRecastMeshManager(mSettings, tileBounds, mTilesGeneration))).first;
         }
         return tile->second.addObject(id, shape, transform, areaType);
     }
@@ -201,15 +168,18 @@ namespace DetourNavigator
         return tile != tiles.end() && tile->second.updateObject(id, transform, areaType);
     }
 
-    boost::optional<RemovedRecastMeshObject> TileCachedRecastMeshManager::removeTile(const ObjectId id,
+    std::optional<RemovedRecastMeshObject> TileCachedRecastMeshManager::removeTile(const ObjectId id,
         const TilePosition& tilePosition, std::map<TilePosition, CachedRecastMeshManager>& tiles)
     {
         const auto tile = tiles.find(tilePosition);
         if (tile == tiles.end())
-            return boost::optional<RemovedRecastMeshObject>();
+            return std::optional<RemovedRecastMeshObject>();
         const auto tileResult = tile->second.removeObject(id);
         if (tile->second.isEmpty())
+        {
             tiles.erase(tile);
+            ++mTilesGeneration;
+        }
         return tileResult;
     }
 }

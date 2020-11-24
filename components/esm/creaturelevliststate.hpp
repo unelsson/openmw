@@ -7,13 +7,22 @@ namespace ESM
 {
     // format 0, saved games only
 
-    struct CreatureLevListState : public ObjectState
+    struct CreatureLevListState final : public ObjectState
     {
         int mSpawnActorId;
         bool mSpawn;
 
-        virtual void load (ESMReader &esm);
-        virtual void save (ESMWriter &esm, bool inInventory = false) const;
+        void load (ESMReader &esm) override;
+        void save (ESMWriter &esm, bool inInventory = false) const override;
+
+        CreatureLevListState& asCreatureLevListState() override
+        {
+            return *this;
+        }
+        const CreatureLevListState& asCreatureLevListState() const override
+        {
+            return *this;
+        }
     };
 }
 

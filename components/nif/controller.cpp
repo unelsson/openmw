@@ -92,24 +92,33 @@ namespace Nif
     void NiMaterialColorController::read(NIFStream *nif)
     {
         Controller::read(nif);
+        if (nif->getVersion() > NIFStream::generateVersion(10,1,0,103))
+            interpolator.read(nif);
         // Two bits that correspond to the controlled material color.
         // 00: Ambient
         // 01: Diffuse
         // 10: Specular
         // 11: Emissive
-        targetColor = (flags >> 4) & 3;
-        data.read(nif);
+        if (nif->getVersion() >= NIFStream::generateVersion(10,1,0,0))
+            targetColor = nif->getUShort() & 3;
+        else
+            targetColor = (flags >> 4) & 3;
+        if (nif->getVersion() <= NIFStream::generateVersion(10,1,0,103))
+            data.read(nif);
     }
 
     void NiMaterialColorController::post(NIFFile *nif)
     {
         Controller::post(nif);
+        interpolator.post(nif);
         data.post(nif);
     }
 
     void NiLookAtController::read(NIFStream *nif)
     {
         Controller::read(nif);
+        if (nif->getVersion() >= NIFStream::generateVersion(10,1,0,0))
+            lookAtFlags = nif->getUShort();
         target.read(nif);
     }
 
@@ -123,12 +132,10 @@ namespace Nif
     {
         Controller::read(nif);
 
-        /*
-           int = 1
-           2xfloat
-           short = 0 or 1
-        */
-        nif->skip(14);
+        bankDir = nif->getInt();
+        maxBankAngle = nif->getFloat();
+        smoothing = nif->getFloat();
+        followAxis = nif->getShort();
         posData.read(nif);
         floatData.read(nif);
     }
@@ -158,51 +165,70 @@ namespace Nif
     void NiKeyframeController::read(NIFStream *nif)
     {
         Controller::read(nif);
-        data.read(nif);
+        if (nif->getVersion() <= NIFStream::generateVersion(10,1,0,103))
+            data.read(nif);
+        else
+            interpolator.read(nif);
     }
 
     void NiKeyframeController::post(NIFFile *nif)
     {
         Controller::post(nif);
         data.post(nif);
+        interpolator.post(nif);
     }
 
-    void NiAlphaController::read(NIFStream *nif)
+    void NiFloatInterpController::read(NIFStream *nif)
     {
         Controller::read(nif);
-        data.read(nif);
+        if (nif->getVersion() <= NIFStream::generateVersion(10,1,0,103))
+            data.read(nif);
+        else
+            interpolator.read(nif);
     }
 
-    void NiAlphaController::post(NIFFile *nif)
+    void NiFloatInterpController::post(NIFFile *nif)
     {
         Controller::post(nif);
         data.post(nif);
-    }
-
-    void NiRollController::read(NIFStream *nif)
-    {
-        Controller::read(nif);
-        data.read(nif);
-    }
-
-    void NiRollController::post(NIFFile *nif)
-    {
-        Controller::post(nif);
-        data.post(nif);
+        interpolator.post(nif);
     }
 
     void NiGeomMorpherController::read(NIFStream *nif)
     {
         Controller::read(nif);
+        if (nif->getVersion() >= NIFFile::NIFVersion::VER_OB_OLD)
+            /*bool updateNormals = !!*/nif->getUShort();
         data.read(nif);
         if (nif->getVersion() >= NIFFile::NIFVersion::VER_MW)
+        {
             /*bool alwaysActive = */nif->getChar(); // Always 0
+            if (nif->getVersion() >= NIFStream::generateVersion(10,1,0,106))
+            {
+                if (nif->getVersion() <= NIFFile::NIFVersion::VER_OB)
+                {
+                    interpolators.read(nif);
+                    if (nif->getVersion() >= NIFStream::generateVersion(10,2,0,0) && nif->getBethVersion() > 9)
+                    {
+                        unsigned int numUnknown = nif->getUInt();
+                        nif->skip(4 * numUnknown);
+                    }
+                }
+                else
+                {
+                    // TODO: handle weighted interpolators
+                    unsigned int numInterps = nif->getUInt();
+                    nif->skip(8 * numInterps);
+                }
+            }
+        }
     }
 
     void NiGeomMorpherController::post(NIFFile *nif)
     {
         Controller::post(nif);
         data.post(nif);
+        interpolators.post(nif);
     }
 
     void NiVisController::read(NIFStream *nif)
@@ -220,16 +246,83 @@ namespace Nif
     void NiFlipController::read(NIFStream *nif)
     {
         Controller::read(nif);
+        if (nif->getVersion() >= NIFStream::generateVersion(10,2,0,0))
+            mInterpolator.read(nif);
         mTexSlot = nif->getUInt();
-        /*unknown=*/nif->getUInt();/*0?*/
-        mDelta = nif->getFloat();
+        if (nif->getVersion() <= NIFStream::generateVersion(10,1,0,103))
+        {
+            timeStart = nif->getFloat();
+            mDelta = nif->getFloat();
+        }
         mSources.read(nif);
     }
 
     void NiFlipController::post(NIFFile *nif)
     {
         Controller::post(nif);
+        mInterpolator.post(nif);
         mSources.post(nif);
+    }
+
+    void bhkBlendController::read(NIFStream *nif)
+    {
+        Controller::read(nif);
+        nif->getUInt(); // Zero
+    }
+
+    void NiPoint3Interpolator::read(NIFStream *nif)
+    {
+        defaultVal = nif->getVector3();
+        data.read(nif);
+    }
+
+    void NiPoint3Interpolator::post(NIFFile *nif)
+    {
+        data.post(nif);
+    }
+
+    void NiBoolInterpolator::read(NIFStream *nif)
+    {
+        defaultVal = nif->getBoolean();
+        data.read(nif);
+    }
+
+    void NiBoolInterpolator::post(NIFFile *nif)
+    {
+        data.post(nif);
+    }
+
+    void NiFloatInterpolator::read(NIFStream *nif)
+    {
+        defaultVal = nif->getFloat();
+        data.read(nif);
+    }
+
+    void NiFloatInterpolator::post(NIFFile *nif)
+    {
+        data.post(nif);
+    }
+
+    void NiTransformInterpolator::read(NIFStream *nif)
+    {
+        defaultPos = nif->getVector3();
+        defaultRot = nif->getQuaternion();
+        defaultScale = nif->getFloat();
+        if (nif->getVersion() <= NIFStream::generateVersion(10,1,0,109))
+        {
+            if (!nif->getBoolean())
+                defaultPos = osg::Vec3f();
+            if (!nif->getBoolean())
+                defaultRot = osg::Quat();
+            if (!nif->getBoolean())
+                defaultScale = 1.f;
+        }
+        data.read(nif);
+    }
+
+    void NiTransformInterpolator::post(NIFFile *nif)
+    {
+        data.post(nif);
     }
 
 }

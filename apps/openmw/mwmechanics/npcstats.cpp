@@ -226,9 +226,9 @@ void MWMechanics::NpcStats::useSkill (int skillIndex, const ESM::Class& class_, 
 
 void MWMechanics::NpcStats::increaseSkill(int skillIndex, const ESM::Class &class_, bool preserveProgress, bool readBook)
 {
-    int base = getSkill (skillIndex).getBase();
+    float base = getSkill (skillIndex).getBase();
 
-    if (base >= 100)
+    if (base >= 100.f)
         return;
 
     base += 1;
@@ -265,7 +265,7 @@ void MWMechanics::NpcStats::increaseSkill(int skillIndex, const ESM::Class &clas
     MWBase::Environment::get().getWindowManager()->playSound("skillraise");
 
     std::string message = MWBase::Environment::get().getWindowManager ()->getGameSettingString ("sNotifyMessage39", "");
-    message = Misc::StringUtils::format(message, ("#{" + ESM::Skill::sSkillNameIds[skillIndex] + "}"), base);
+    message = Misc::StringUtils::format(message, ("#{" + ESM::Skill::sSkillNameIds[skillIndex] + "}"), static_cast<int>(base));
 
     if (readBook)
         message = "#{sBookSkillMessage}\n" + message;
@@ -299,7 +299,7 @@ void MWMechanics::NpcStats::levelUp()
     for (int i=0; i<ESM::Attribute::Length; ++i)
         mSkillIncreases[i] = 0;
 
-    const int endurance = getAttribute(ESM::Attribute::Endurance).getBase();
+    const float endurance = getAttribute(ESM::Attribute::Endurance).getBase();
 
     // "When you gain a level, in addition to increasing three primary attributes, your Health
     // will automatically increase by 10% of your Endurance attribute. If you increased Endurance this level,
@@ -316,8 +316,8 @@ void MWMechanics::NpcStats::levelUp()
 
 void MWMechanics::NpcStats::updateHealth()
 {
-    const int endurance = getAttribute(ESM::Attribute::Endurance).getBase();
-    const int strength = getAttribute(ESM::Attribute::Strength).getBase();
+    const float endurance = getAttribute(ESM::Attribute::Endurance).getBase();
+    const float strength = getAttribute(ESM::Attribute::Strength).getBase();
 
     setHealth(floor(0.5f * (strength + endurance)));
 }
@@ -409,13 +409,24 @@ bool MWMechanics::NpcStats::hasSkillsForRank (const std::string& factionId, int 
 
     const ESM::RankData& rankData = faction.mData.mRankData[rank];
 
-    if (*iter<rankData.mSkill1)
+    if (*iter<rankData.mPrimarySkill)
         return false;
 
     if (skills.size() < 2)
         return true;
 
-    return *++iter>=rankData.mSkill2;
+    iter++;
+    if (*iter<rankData.mFavouredSkill)
+        return false;
+
+    if (skills.size() < 3)
+        return true;
+
+    iter++;
+    if (*iter<rankData.mFavouredSkill)
+        return false;
+
+    return true;
 }
 
 bool MWMechanics::NpcStats::isWerewolf() const
@@ -453,6 +464,11 @@ float MWMechanics::NpcStats::getTimeToStartDrowning() const
 void MWMechanics::NpcStats::setTimeToStartDrowning(float time)
 {
     mTimeToStartDrowning=time;
+}
+
+void MWMechanics::NpcStats::writeState (ESM::CreatureStats& state) const
+{
+    CreatureStats::writeState(state);
 }
 
 void MWMechanics::NpcStats::writeState (ESM::NpcStats& state) const
@@ -493,6 +509,10 @@ void MWMechanics::NpcStats::writeState (ESM::NpcStats& state) const
     std::copy (mUsedIds.begin(), mUsedIds.end(), std::back_inserter (state.mUsedIds));
 
     state.mTimeToStartDrowning = mTimeToStartDrowning;
+}
+void MWMechanics::NpcStats::readState (const ESM::CreatureStats& state)
+{
+    CreatureStats::readState(state);
 }
 
 void MWMechanics::NpcStats::readState (const ESM::NpcStats& state)

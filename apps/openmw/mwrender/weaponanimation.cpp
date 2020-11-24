@@ -98,6 +98,11 @@ void WeaponAnimation::attachArrow(MWWorld::Ptr actor)
     }
 }
 
+void WeaponAnimation::detachArrow(MWWorld::Ptr actor)
+{
+    mAmmunition.reset();
+}
+
 void WeaponAnimation::releaseArrow(MWWorld::Ptr actor, float attackStrength)
 {
     MWWorld::InventoryStore& inv = actor.getClass().getInventoryStore(actor);
@@ -168,7 +173,7 @@ void WeaponAnimation::releaseArrow(MWWorld::Ptr actor, float attackStrength)
 }
 
 void WeaponAnimation::addControllers(const std::map<std::string, osg::ref_ptr<osg::MatrixTransform> >& nodes,
-                                     std::multimap<osg::ref_ptr<osg::Node>, osg::ref_ptr<osg::NodeCallback> > &map, osg::Node* objectRoot)
+    std::vector<std::pair<osg::ref_ptr<osg::Node>, osg::ref_ptr<osg::NodeCallback>>> &map, osg::Node* objectRoot)
 {
     for (int i=0; i<2; ++i)
     {
@@ -180,7 +185,7 @@ void WeaponAnimation::addControllers(const std::map<std::string, osg::ref_ptr<os
             osg::Node* node = found->second;
             mSpineControllers[i] = new RotateController(objectRoot);
             node->addUpdateCallback(mSpineControllers[i]);
-            map.insert(std::make_pair(node, mSpineControllers[i]));
+            map.emplace_back(node, mSpineControllers[i]);
         }
     }
 }

@@ -18,7 +18,6 @@
 #include <components/sceneutil/actorutil.hpp>
 #include <components/sceneutil/attach.hpp>
 #include <components/sceneutil/visitor.hpp>
-#include <components/sceneutil/vismask.hpp>
 #include <components/sceneutil/skeleton.hpp>
 
 #include <components/settings/settings.hpp>
@@ -44,6 +43,7 @@
 #include "camera.hpp"
 #include "rotatecontroller.hpp"
 #include "renderbin.hpp"
+#include "vismask.hpp"
 
 namespace
 {
@@ -145,7 +145,7 @@ public:
     void setBlinkStart(float value);
     void setBlinkStop(float value);
 
-    virtual float getValue(osg::NodeVisitor* nv);
+    float getValue(osg::NodeVisitor* nv) override;
 };
 
 // --------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ public:
         mOffset = offset;
     }
 
-    virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+    void operator()(osg::Node* node, osg::NodeVisitor* nv) override
     {
         osg::MatrixTransform* transform = static_cast<osg::MatrixTransform*>(node);
         osg::Matrix matrix = transform->getMatrix();
@@ -266,13 +266,22 @@ void HeadAnimationTime::setBlinkStop(float value)
 
 // ----------------------------------------------------
 
-NpcAnimation::NpcType NpcAnimation::getNpcType()
+NpcAnimation::NpcType NpcAnimation::getNpcType() const
 {
     const MWWorld::Class &cls = mPtr.getClass();
+    // Dead vampires should typically stay vampires.
+    if (mNpcType == Type_Vampire && cls.getNpcStats(mPtr).isDead() && !cls.getNpcStats(mPtr).isWerewolf())
+        return mNpcType;
+    return getNpcType(mPtr);
+}
+
+NpcAnimation::NpcType NpcAnimation::getNpcType(const MWWorld::Ptr& ptr)
+{
+    const MWWorld::Class &cls = ptr.getClass();
     NpcAnimation::NpcType curType = Type_Normal;
-    if (cls.getCreatureStats(mPtr).getMagicEffects().get(ESM::MagicEffect::Vampirism).getMagnitude() > 0)
+    if (cls.getCreatureStats(ptr).getMagicEffects().get(ESM::MagicEffect::Vampirism).getMagnitude() > 0)
         curType = Type_Vampire;
-    if (cls.getNpcStats(mPtr).isWerewolf())
+    if (cls.getNpcStats(ptr).isWerewolf())
         curType = Type_Werewolf;
 
     return curType;
@@ -323,7 +332,7 @@ NpcAnimation::NpcAnimation(const MWWorld::Ptr& ptr, osg::ref_ptr<osg::Group> par
     mViewMode(viewMode),
     mShowWeapons(false),
     mShowCarriedLeft(true),
-    mNpcType(getNpcType()),
+    mNpcType(getNpcType(ptr)),
     mFirstPersonFieldOfView(firstPersonFieldOfView),
     mSoundsDisabled(disableSounds),
     mAccurateAiming(false),
@@ -340,6 +349,8 @@ NpcAnimation::NpcAnimation(const MWWorld::Ptr& ptr, osg::ref_ptr<osg::Group> par
         mPartPriorities[i] = 0;
     }
 
+    std::fill(mSounds.begin(), mSounds.end(), nullptr);
+
     updateNpcBase();
 }
 
@@ -352,6 +363,7 @@ void NpcAnimation::setViewMode(NpcAnimation::ViewMode viewMode)
     mViewMode = viewMode;
     MWBase::Environment::get().getWorld()->scaleObject(mPtr, mPtr.getCellRef().getScale()); // apply race height after view change
 
+    mAmmunition.reset();
     rebuild();
     setRenderBin();
 }
@@ -366,7 +378,7 @@ public:
         mDepth->setWriteMask(true);
     }
 
-    virtual void drawImplementation(osgUtil::RenderBin* bin, osg::RenderInfo& renderInfo, osgUtil::RenderLeaf*& previous)
+    void drawImplementation(osgUtil::RenderBin* bin, osg::RenderInfo& renderInfo, osgUtil::RenderLeaf*& previous) override
     {
         renderInfo.getState()->applyAttribute(mDepth);
 
@@ -388,7 +400,7 @@ public:
     {
     }
 
-    virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+    void operator()(osg::Node* node, osg::NodeVisitor* nv) override
     {
         osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(nv);
         float fov, aspect, zNear, zFar;
@@ -426,12 +438,10 @@ void NpcAnimation::setRenderBin()
             osgUtil::RenderBin::addRenderBinPrototype("DepthClear", depthClearBin);
             prototypeAdded = true;
         }
-
-        osg::StateSet* stateset = mObjectRoot->getOrCreateStateSet();
-        stateset->setRenderBinDetails(RenderBin_FirstPerson, "DepthClear", osg::StateSet::OVERRIDE_RENDERBIN_DETAILS);
+        mObjectRoot->getOrCreateStateSet()->setRenderBinDetails(RenderBin_FirstPerson, "DepthClear", osg::StateSet::OVERRIDE_RENDERBIN_DETAILS);
     }
-    else
-        Animation::setRenderBin();
+    else if (osg::StateSet* stateset = mObjectRoot->getStateSet())
+        stateset->setRenderBinToInherit();
 }
 
 void NpcAnimation::rebuild()
@@ -535,7 +545,7 @@ void NpcAnimation::updateNpcBase()
 
         addAnimSource(smodel, smodel);
 
-        mObjectRoot->setNodeMask(SceneUtil::Mask_FirstPerson);
+        mObjectRoot->setNodeMask(Mask_FirstPerson);
         mObjectRoot->addCullCallback(new OverrideFieldOfViewCallback(mFirstPersonFieldOfView));
     }
 
@@ -587,7 +597,7 @@ void NpcAnimation::updateParts()
         int mBasePriority;
     } slotlist[] = {
         // FIXME: Priority is based on the number of reserved slots. There should be a better way.
-        { MWWorld::InventoryStore::Slot_Robe,         12 },
+        { MWWorld::InventoryStore::Slot_Robe,         11 },
         { MWWorld::InventoryStore::Slot_Skirt,         3 },
         { MWWorld::InventoryStore::Slot_Helmet,        0 },
         { MWWorld::InventoryStore::Slot_Cuirass,       0 },
@@ -641,7 +651,7 @@ void NpcAnimation::updateParts()
             ESM::PartReferenceType parts[] = {
                 ESM::PRT_Groin, ESM::PRT_Skirt, ESM::PRT_RLeg, ESM::PRT_LLeg,
                 ESM::PRT_RUpperarm, ESM::PRT_LUpperarm, ESM::PRT_RKnee, ESM::PRT_LKnee,
-                ESM::PRT_RForearm, ESM::PRT_LForearm
+                ESM::PRT_RForearm, ESM::PRT_LForearm, ESM::PRT_Cuirass
             };
             size_t parts_size = sizeof(parts)/sizeof(parts[0]);
             for(size_t p = 0;p < parts_size;++p)
@@ -738,7 +748,7 @@ osg::Vec3f NpcAnimation::runAnimation(float timepassed)
         mFirstPersonNeckController->setOffset(mFirstPersonOffset);
     }
 
-    WeaponAnimation::configureControllers(mPtr.getRefData().getPosition().rot[0]);
+    WeaponAnimation::configureControllers(mPtr.getRefData().getPosition().rot[0] + getBodyPitchRadians());
 
     return ret;
 }
@@ -749,10 +759,10 @@ void NpcAnimation::removeIndividualPart(ESM::PartReferenceType type)
     mPartslots[type] = -1;
 
     mObjectParts[type].reset();
-    if (!mSoundIds[type].empty() && !mSoundsDisabled)
+    if (mSounds[type] != nullptr && !mSoundsDisabled)
     {
-        MWBase::Environment::get().getSoundManager()->stopSound3D(mPtr, mSoundIds[type]);
-        mSoundIds[type].clear();
+        MWBase::Environment::get().getSoundManager()->stopSound(mSounds[type]);
+        mSounds[type] = nullptr;
     }
 }
 
@@ -831,10 +841,10 @@ bool NpcAnimation::addOrReplaceIndividualPart(ESM::PartReferenceType type, int g
         MWWorld::ConstContainerStoreIterator csi = inv.getSlot(group < 0 ? MWWorld::InventoryStore::Slot_Helmet : group);
         if (csi != inv.end())
         {
-            mSoundIds[type] = csi->getClass().getSound(*csi);
-            if (!mSoundIds[type].empty())
+            const auto soundId = csi->getClass().getSound(*csi);
+            if (!soundId.empty())
             {
-                MWBase::Environment::get().getSoundManager()->playSound3D(mPtr, mSoundIds[type],
+                mSounds[type] = MWBase::Environment::get().getSoundManager()->playSound3D(mPtr, soundId,
                     1.0f, 1.0f, MWSound::Type::Sfx, MWSound::PlayMode::Loop
                 );
             }
@@ -947,7 +957,7 @@ void NpcAnimation::addControllers()
             osg::MatrixTransform* node = found->second.get();
             mFirstPersonNeckController = new NeckController(mObjectRoot.get());
             node->addUpdateCallback(mFirstPersonNeckController);
-            mActiveControllers.emplace(node, mFirstPersonNeckController);
+            mActiveControllers.emplace_back(node, mFirstPersonNeckController);
         }
     }
     else if (mViewMode == VM_Normal)
@@ -1042,6 +1052,12 @@ void NpcAnimation::attachArrow()
     updateQuiver();
 }
 
+void NpcAnimation::detachArrow()
+{
+    WeaponAnimation::detachArrow(mPtr);
+    updateQuiver();
+}
+
 void NpcAnimation::releaseArrow(float attackStrength)
 {
     WeaponAnimation::releaseArrow(mPtr, attackStrength);
@@ -1062,10 +1078,15 @@ osg::Group* NpcAnimation::getArrowBone()
     int type = weapon->get<ESM::Weapon>()->mBase->mData.mType;
     int ammoType = MWMechanics::getWeaponType(type)->mAmmoType;
 
-    SceneUtil::FindByNameVisitor findVisitor (MWMechanics::getWeaponType(ammoType)->mAttachBone);
-    part->getNode()->accept(findVisitor);
-
-    return findVisitor.mFoundNode;
+    // Try to find and attachment bone in actor's skeleton, otherwise fall back to the ArrowBone in weapon's mesh
+    osg::Group* bone = getBoneByName(MWMechanics::getWeaponType(ammoType)->mAttachBone);
+    if (bone == nullptr)
+    {
+        SceneUtil::FindByNameVisitor findVisitor ("ArrowBone");
+        part->getNode()->accept(findVisitor);
+        bone = findVisitor.mFoundNode;
+    }
+    return bone;
 }
 
 osg::Node* NpcAnimation::getWeaponNode()
@@ -1124,7 +1145,7 @@ void NpcAnimation::equipmentChanged()
     static const bool shieldSheathing = Settings::Manager::getBool("shield sheathing", "Game");
     if (shieldSheathing)
     {
-        int weaptype;
+        int weaptype = ESM::Weapon::None;
         MWMechanics::getActiveWeapon(mPtr, &weaptype);
         showCarriedLeft(updateCarriedLeftVisible(weaptype));
     }

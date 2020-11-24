@@ -13,6 +13,7 @@ namespace ESM
     class ESMWriter;
     struct CellId;
     struct Cell;
+    struct RefNum;
 }
 
 namespace Loading
@@ -41,6 +42,8 @@ namespace MWWorld
 
             Ptr getPtrAndCache (const std::string& name, CellStore& cellStore);
 
+            Ptr getPtr(CellStore& cellStore, const std::string& id, const ESM::RefNum& refNum);
+
             void writeCell (ESM::ESMWriter& writer, CellStore& cell) const;
 
         public:
@@ -62,6 +65,8 @@ namespace MWWorld
             /// @note name must be lower case
             Ptr getPtr (const std::string& name);
 
+            Ptr getPtr(const std::string& id, const ESM::RefNum& refNum);
+
             void rest (double hours);
             void recharge (float duration);
 
@@ -74,6 +79,8 @@ namespace MWWorld
             /// @note Due to the current implementation of getPtr this only supports one Ptr per cell.
             /// @note name must be lower case
             void getInteriorPtrs (const std::string& name, std::vector<MWWorld::Ptr>& out);
+
+            std::vector<MWWorld::Ptr> getAll(const std::string& id);
 
             int countSavedGameRecords() const;
 

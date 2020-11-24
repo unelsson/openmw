@@ -60,7 +60,13 @@ namespace DetourNavigator
             return false;
         }
 
+        void addPathgrid(const ESM::Cell& /*cell*/, const ESM::Pathgrid& /*pathgrid*/) override {}
+
+        void removePathgrid(const ESM::Pathgrid& /*pathgrid*/) override {}
+
         void update(const osg::Vec3f& /*playerPosition*/) override {}
+
+        void setUpdatesEnabled(bool enabled) override {}
 
         void wait() override {}
 
@@ -80,6 +86,11 @@ namespace DetourNavigator
         }
 
         void reportStats(unsigned int /*frameNumber*/, osg::Stats& /*stats*/) const override {}
+
+        RecastMeshTiles getRecastMeshTiles() override
+        {
+            return {};
+        }
 
     private:
         Settings mDefaultSettings {};

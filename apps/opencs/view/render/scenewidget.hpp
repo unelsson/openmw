@@ -49,7 +49,7 @@ namespace CSVRender
             Q_OBJECT
 
         public:
-            RenderWidget(QWidget* parent = 0, Qt::WindowFlags f = 0);
+            RenderWidget(QWidget* parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
             virtual ~RenderWidget();
 
             /// Initiates a request to redraw the view
@@ -78,8 +78,8 @@ namespace CSVRender
     {
             Q_OBJECT
         public:
-            SceneWidget(std::shared_ptr<Resource::ResourceSystem> resourceSystem, QWidget* parent = 0,
-                    Qt::WindowFlags f = 0, bool retrieveInput = true);
+            SceneWidget(std::shared_ptr<Resource::ResourceSystem> resourceSystem, QWidget* parent = nullptr,
+                        Qt::WindowFlags f = Qt::WindowFlags(), bool retrieveInput = true);
             virtual ~SceneWidget();
 
             CSVWidget::SceneToolMode *makeLightingSelector (CSVWidget::SceneToolbar *parent);
@@ -97,8 +97,8 @@ namespace CSVRender
 
             void setAmbient(const osg::Vec4f& ambient);
 
-            virtual void mouseMoveEvent (QMouseEvent *event);
-            virtual void wheelEvent (QWheelEvent *event);
+            void mouseMoveEvent (QMouseEvent *event) override;
+            void wheelEvent (QWheelEvent *event) override;
 
             std::shared_ptr<Resource::ResourceSystem> mResourceSystem;
 

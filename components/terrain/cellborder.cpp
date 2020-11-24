@@ -1,10 +1,9 @@
 #include "cellborder.hpp"
 
+#include <osg/Material>
 #include <osg/PolygonMode>
 #include <osg/Geometry>
 #include <osg/Geode>
-
-#include <components/sceneutil/vismask.hpp>
 
 #include "world.hpp"
 #include "../esm/loadland.hpp"
@@ -12,9 +11,10 @@
 namespace Terrain
 {
 
-CellBorder::CellBorder(Terrain::World *world, osg::Group *root):
+CellBorder::CellBorder(Terrain::World *world, osg::Group *root, int borderMask):
     mWorld(world),
-    mRoot(root)
+    mRoot(root),
+    mBorderMask(borderMask)
 {
 }
 
@@ -65,12 +65,15 @@ void CellBorder::createCellBorderGeometry(int x, int y)
     borderGeode->addDrawable(border.get());
 
     osg::StateSet *stateSet = borderGeode->getOrCreateStateSet();
+    osg::ref_ptr<osg::Material> material (new osg::Material);
+    material->setColorMode(osg::Material::AMBIENT_AND_DIFFUSE);
+    stateSet->setAttribute(material);
 
     osg::PolygonMode* polygonmode = new osg::PolygonMode;
     polygonmode->setMode(osg::PolygonMode::FRONT_AND_BACK, osg::PolygonMode::LINE);
     stateSet->setAttributeAndModes(polygonmode,osg::StateAttribute::ON);
 
-    borderGeode->setNodeMask(SceneUtil::Mask_Debug);
+    borderGeode->setNodeMask(mBorderMask);
 
     mRoot->addChild(borderGeode);
 

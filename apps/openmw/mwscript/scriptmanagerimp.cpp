@@ -19,6 +19,7 @@
 #include "../mwworld/esmstore.hpp"
 
 #include "extensions.hpp"
+#include "interpretercontext.hpp"
 
 namespace MWScript
 {
@@ -78,8 +79,8 @@ namespace MWScript
             if (Success)
             {
                 std::vector<Interpreter::Type_Code> code;
-                mParser.getCode (code);
-                mScripts.insert (std::make_pair (name, std::make_pair (code, mParser.getLocals())));
+                mParser.getCode(code);
+                mScripts.emplace(name, CompiledScript(code, mParser.getLocals()));
 
                 return true;
             }
@@ -88,7 +89,7 @@ namespace MWScript
         return false;
     }
 
-    void ScriptManager::run (const std::string& name, Interpreter::Context& interpreterContext)
+    bool ScriptManager::run (const std::string& name, Interpreter::Context& interpreterContext)
     {
         // compile script
         ScriptCollection::iterator iter = mScripts.find (name);
@@ -99,8 +100,8 @@ namespace MWScript
             {
                 // failed -> ignore script from now on.
                 std::vector<Interpreter::Type_Code> empty;
-                mScripts.insert (std::make_pair (name, std::make_pair (empty, Compiler::Locals())));
-                return;
+                mScripts.emplace(name, CompiledScript(empty, Compiler::Locals()));
+                return false;
             }
 
             iter = mScripts.find (name);
@@ -108,7 +109,7 @@ namespace MWScript
         }
 
         // execute script
-        if (!iter->second.first.empty())
+        if (!iter->second.mByteCode.empty() && iter->second.mActive)
             try
             {
                 if (!mOpcodesInstalled)
@@ -117,15 +118,30 @@ namespace MWScript
                     mOpcodesInstalled = true;
                 }
 
-                mInterpreter.run (&iter->second.first[0], iter->second.first.size(), interpreterContext);
+                mInterpreter.run (&iter->second.mByteCode[0], iter->second.mByteCode.size(), interpreterContext);
+                return true;
+            }
+            catch (const MissingImplicitRefError& e)
+            {
+                Log(Debug::Error) << "Execution of script " << name << " failed: "  << e.what();
             }
             catch (const std::exception& e)
             {
-                Log(Debug::Error) << "Execution of script " << name << " failed:";
-                Log(Debug::Error) << e.what();
+                Log(Debug::Error) << "Execution of script " << name << " failed: "  << e.what();
 
-                iter->second.first.clear(); // don't execute again.
+                iter->second.mActive = false; // don't execute again.
             }
+        return false;
+    }
+
+    void ScriptManager::clear()
+    {
+        for (auto& script : mScripts)
+        {
+            script.second.mActive = true;
+        }
+
+        mGlobalScripts.clear();
     }
 
     std::pair<int, int> ScriptManager::compileAll()
@@ -133,18 +149,17 @@ namespace MWScript
         int count = 0;
         int success = 0;
 
-        const MWWorld::Store<ESM::Script>& scripts = mStore.get<ESM::Script>();
-
-        for (MWWorld::Store<ESM::Script>::iterator iter = scripts.begin();
-            iter != scripts.end(); ++iter)
+        for (auto& script : mStore.get<ESM::Script>())
+        {
             if (!std::binary_search (mScriptBlacklist.begin(), mScriptBlacklist.end(),
-                Misc::StringUtils::lowerCase (iter->mId)))
+                Misc::StringUtils::lowerCase(script.mId)))
             {
                 ++count;
 
-                if (compile (iter->mId))
+                if (compile(script.mId))
                     ++success;
             }
+        }
 
         return std::make_pair (count, success);
     }
@@ -157,7 +172,7 @@ namespace MWScript
             ScriptCollection::iterator iter = mScripts.find (name2);
 
             if (iter!=mScripts.end())
-                return iter->second.second;
+                return iter->second.mLocals;
         }
 
         {
@@ -171,7 +186,7 @@ namespace MWScript
         {
             Compiler::Locals locals;
 
-            mErrorHandler.setContext(name2 + "[local variables]");
+            const Compiler::ContextOverride override(mErrorHandler, name2 + "[local variables]");
 
             std::istringstream stream (script->mScriptText);
             Compiler::QuickFileParser parser (mErrorHandler, mCompilerContext, locals);
@@ -179,7 +194,7 @@ namespace MWScript
             scanner.scan (parser);
 
             std::map<std::string, Compiler::Locals>::iterator iter =
-                mOtherLocals.insert (std::make_pair (name2, locals)).first;
+                mOtherLocals.emplace(name2, locals).first;
 
             return iter->second;
         }

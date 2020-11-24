@@ -26,7 +26,7 @@ struct File
 
     virtual size_t numRoots() const = 0;
 
-    virtual std::string getString(size_t index) const = 0;
+    virtual std::string getString(uint32_t index) const = 0;
 
     virtual void setUseSkinning(bool skinning) = 0;
 
@@ -62,6 +62,8 @@ class NIFFile final : public File
 
     bool mUseSkinning = false;
 
+    static bool sLoadUnsupportedFiles;
+
     /// Parse the file
     void parse(Files::IStreamPtr stream);
 
@@ -79,11 +81,7 @@ public:
     enum NIFVersion
     {
         VER_MW         = 0x04000002,    // 4.0.0.2. Main Morrowind NIF version.
-        VER_CI         = 0x04020200,    // 4.2.2.0. Main Culpa Innata NIF version, also used in Civ4.
-        VER_ZT2        = 0x0A000100,    // 10.0.1.0. Main Zoo Tycoon 2 NIF version, also used in Oblivion and Civ4.
         VER_OB_OLD     = 0x0A000102,    // 10.0.1.2. Main older Oblivion NIF version.
-        VER_GAMEBRYO   = 0x0A010000,    // 10.1.0.0. Lots of games use it. The first version that has Gamebryo File Format header.
-        VER_CIV4       = 0x14000004,    // 20.0.0.4. Main Civilization IV NIF version.
         VER_OB         = 0x14000005,    // 20.0.0.5. Main Oblivion NIF version.
         VER_BGS        = 0x14020007     // 20.2.0.7. Main Fallout 3/4/76/New Vegas and Skyrim/SkyrimSE NIF version.
     };
@@ -129,8 +127,10 @@ public:
     size_t numRoots() const override { return roots.size(); }
 
     /// Get a given string from the file's string table
-    std::string getString(size_t index) const override
+    std::string getString(uint32_t index) const override
     {
+        if (index == std::numeric_limits<uint32_t>::max())
+            return std::string();
         return strings.at(index);
     }
 
@@ -151,6 +151,8 @@ public:
 
     /// Get the Bethesda version of the NIF format used
     unsigned int getBethVersion() const override { return bethVer; }
+
+    static void setLoadUnsupportedFiles(bool load);
 };
 using NIFFilePtr = std::shared_ptr<const Nif::NIFFile>;
 

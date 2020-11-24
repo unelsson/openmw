@@ -1,13 +1,9 @@
 #include "graphicspage.hpp"
 
-#include <csignal>
 #include <QDesktopWidget>
 #include <QMessageBox>
 #include <QDir>
-
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
 #include <QScreen>
-#endif
 
 #ifdef MAC_OS_X_VERSION_MIN_REQUIRED
 #undef MAC_OS_X_VERSION_MIN_REQUIRED
@@ -17,12 +13,13 @@
 
 #include <SDL_video.h>
 
+#include <numeric>
+
 #include <components/files/configurationmanager.hpp>
-#include <components/misc/gcd.hpp>
 
 QString getAspect(int x, int y)
 {
-    int gcd = Misc::gcd (x, y);
+    int gcd = std::gcd (x, y);
     int xaspect = x / gcd;
     int yaspect = y / gcd;
     // special case: 8 : 5 is usually referred to as 16:10
@@ -55,13 +52,11 @@ Launcher::GraphicsPage::GraphicsPage(Files::ConfigurationManager &cfg, Settings:
 
 bool Launcher::GraphicsPage::setupSDL()
 {
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     bool sdlConnectSuccessful = initSDL();
     if (!sdlConnectSuccessful)
     {
         return false;
     }
-#endif
 
     int displays = SDL_GetNumVideoDisplays();
 
@@ -71,21 +66,22 @@ bool Launcher::GraphicsPage::setupSDL()
         msgBox.setWindowTitle(tr("Error receiving number of screens"));
         msgBox.setIcon(QMessageBox::Critical);
         msgBox.setStandardButtons(QMessageBox::Ok);
-        msgBox.setText(tr("<br><b>SDL_GetNumDisplayModes failed:</b><br><br>") + QString::fromUtf8(SDL_GetError()) + "<br>");
+        msgBox.setText(tr("<br><b>SDL_GetNumVideoDisplays failed:</b><br><br>") + QString::fromUtf8(SDL_GetError()) + "<br>");
         msgBox.exec();
         return false;
     }
 
     screenComboBox->clear();
+    mResolutionsPerScreen.clear();
     for (int i = 0; i < displays; i++)
     {
+        mResolutionsPerScreen.append(getAvailableResolutions(i));
         screenComboBox->addItem(QString(tr("Screen ")) + QString::number(i + 1));
     }
+    screenChanged(0);
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     // Disconnect from SDL processes
     quitSDL();
-#endif
 
     return true;
 }
@@ -144,6 +140,10 @@ bool Launcher::GraphicsPage::loadSettings()
         objectShadowsCheckBox->setCheckState(Qt::Checked);
     if (mEngineSettings.getBool("enable indoor shadows", "Shadows"))
         indoorShadowsCheckBox->setCheckState(Qt::Checked);
+
+    shadowComputeSceneBoundsComboBox->setCurrentIndex(
+        shadowComputeSceneBoundsComboBox->findText(
+            QString(tr(mEngineSettings.getString("compute scene bounds", "Shadows").c_str()))));
 
     int shadowDistLimit = mEngineSettings.getInt("maximum shadow map distance", "Shadows");
     if (shadowDistLimit > 0)
@@ -231,7 +231,7 @@ void Launcher::GraphicsPage::saveSettings()
     bool cPlayerShadows = playerShadowsCheckBox->checkState();
     if (cActorShadows || cObjectShadows || cTerrainShadows || cPlayerShadows)
     {
-        if (mEngineSettings.getBool("enable shadows", "Shadows") != true)
+        if (!mEngineSettings.getBool("enable shadows", "Shadows"))
             mEngineSettings.setBool("enable shadows", "Shadows", true);
         if (mEngineSettings.getBool("actor shadows", "Shadows") != cActorShadows)
             mEngineSettings.setBool("actor shadows", "Shadows", cActorShadows);
@@ -263,6 +263,10 @@ void Launcher::GraphicsPage::saveSettings()
     int cShadowRes = shadowResolutionComboBox->currentText().toInt();
     if (cShadowRes != mEngineSettings.getInt("shadow map resolution", "Shadows"))
         mEngineSettings.setInt("shadow map resolution", "Shadows", cShadowRes);
+
+    auto cComputeSceneBounds = shadowComputeSceneBoundsComboBox->currentText().toStdString();
+    if (cComputeSceneBounds != mEngineSettings.getString("compute scene bounds", "Shadows"))
+        mEngineSettings.setString("compute scene bounds", "Shadows", cComputeSceneBounds);
 }
 
 QStringList Launcher::GraphicsPage::getAvailableResolutions(int screen)
@@ -316,7 +320,6 @@ QRect Launcher::GraphicsPage::getMaximumResolution()
 {
     QRect max;
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     for (QScreen* screen : QGuiApplication::screens())
     {
         QRect res = screen->geometry();
@@ -325,17 +328,6 @@ QRect Launcher::GraphicsPage::getMaximumResolution()
         if (res.height() > max.height())
             max.setHeight(res.height());
     }
-#else
-    int screens = QApplication::desktop()->screenCount();
-    for (int i = 0; i < screens; ++i)
-    {
-        QRect res = QApplication::desktop()->screenGeometry(i);
-        if (res.width() > max.width())
-            max.setWidth(res.width());
-        if (res.height() > max.height())
-            max.setHeight(res.height());
-    }
-#endif
     return max;
 }
 
@@ -343,7 +335,7 @@ void Launcher::GraphicsPage::screenChanged(int screen)
 {
     if (screen >= 0) {
         resolutionComboBox->clear();
-        resolutionComboBox->addItems(getAvailableResolutions(screen));
+        resolutionComboBox->addItems(mResolutionsPerScreen[screen]);
     }
 }
 

@@ -11,6 +11,8 @@
 
 #include "../mwgui/mode.hpp"
 
+#include <components/sdlutil/events.hpp>
+
 namespace Loading
 {
     class Listener;
@@ -86,7 +88,7 @@ namespace SFO
 namespace MWBase
 {
     /// \brief Interface for widnow manager (implemented in MWGui)
-    class WindowManager
+    class WindowManager : public SDLUtil::WindowListener
     {
             WindowManager (const WindowManager&);
             ///< not implemented
@@ -152,26 +154,10 @@ namespace MWBase
 
             virtual void setConsoleSelectedObject(const MWWorld::Ptr& object) = 0;
 
-            /// Set value for the given ID.
-            virtual void setValue (const std::string& id, const MWMechanics::AttributeValue& value) = 0;
-            virtual void setValue (int parSkill, const MWMechanics::SkillValue& value) = 0;
-            virtual void setValue (const std::string& id, const MWMechanics::DynamicStat<float>& value) = 0;
-            virtual void setValue (const std::string& id, const std::string& value) = 0;
-            virtual void setValue (const std::string& id, int value) = 0;
-
             /// Set time left for the player to start drowning (update the drowning bar)
             /// @param time time left to start drowning
             /// @param maxTime how long we can be underwater (in total) until drowning starts
             virtual void setDrowningTimeLeft (float time, float maxTime) = 0;
-
-            virtual void setPlayerClass (const ESM::Class &class_) = 0;
-            ///< set current class of player
-
-            virtual void configureSkills (const SkillList& major, const SkillList& minor) = 0;
-            ///< configure skill groups, each set contains the skill ID for that group.
-
-            virtual void updateSkillArea() = 0;
-            ///< update display of skills, factions, birth sign, reputation and bounty
 
             virtual void changeCell(const MWWorld::CellStore* cell) = 0;
             ///< change the active cell
@@ -249,13 +235,9 @@ namespace MWBase
             /// returns the index of the pressed button or -1 if no button was pressed (->MessageBoxmanager->InteractiveMessageBox)
             virtual int readPressedButton() = 0;
 
-            virtual void onFrame (float frameDuration) = 0;
+            virtual void update (float duration) = 0;
 
-            /// \todo get rid of this stuff. Move it to the respective UI element classes, if needed.
-            virtual std::map<int, MWMechanics::SkillValue > getPlayerSkillValues() = 0;
-            virtual std::map<int, MWMechanics::AttributeValue > getPlayerAttributeValues() = 0;
-            virtual SkillList getPlayerMinorSkills() = 0;
-            virtual SkillList getPlayerMajorSkills() = 0;
+            virtual void updateConsoleObjectPtr(const MWWorld::Ptr& currentPtr, const MWWorld::Ptr& newPtr) = 0;
 
             /**
              * Fetches a GMST string from the store, if there is no setting with the given
@@ -267,8 +249,6 @@ namespace MWBase
             virtual std::string getGameSettingString(const std::string &id, const std::string &default_) = 0;
 
             virtual void processChangedSettings(const std::set< std::pair<std::string, std::string> >& changed) = 0;
-
-            virtual void windowResized(int x, int y) = 0;
 
             virtual void executeInConsole (const std::string& path) = 0;
 
@@ -360,6 +340,14 @@ namespace MWBase
 
             virtual bool injectKeyPress(MyGUI::KeyCode key, unsigned int text, bool repeat) = 0;
             virtual bool injectKeyRelease(MyGUI::KeyCode key) = 0;
+
+            void windowVisibilityChange(bool visible) override = 0;
+            void windowResized(int x, int y) override = 0;
+            void windowClosed() override = 0;
+            virtual bool isWindowVisible() = 0;
+
+            virtual void watchActor(const MWWorld::Ptr& ptr) = 0;
+            virtual MWWorld::Ptr getWatchedActor() const = 0;
     };
 }
 

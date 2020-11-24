@@ -65,6 +65,7 @@ namespace CSVWorld
             QAction *mPreviewAction;
             QAction *mExtendedDeleteAction;
             QAction *mExtendedRevertAction;
+            QAction *mHelpAction;
             TableEditIdAction *mEditIdAction;
             CSMWorld::IdTableProxyModel *mProxyModel;
             CSMWorld::IdTableBase *mModel;
@@ -76,13 +77,13 @@ namespace CSVWorld
 
         private:
 
-            void contextMenuEvent (QContextMenuEvent *event);
+            void contextMenuEvent (QContextMenuEvent *event) override;
 
-            void mouseMoveEvent(QMouseEvent *event);
+            void mouseMoveEvent(QMouseEvent *event) override;
 
         protected:
 
-            virtual void mouseDoubleClickEvent (QMouseEvent *event);
+            void mouseDoubleClickEvent (QMouseEvent *event) override;
 
         public:
 
@@ -99,7 +100,7 @@ namespace CSVWorld
 
             std::vector<std::string> getSelectedIds() const;
 
-            virtual std::vector<CSMWorld::UniversalId> getDraggedRecords() const;
+            std::vector<CSMWorld::UniversalId> getDraggedRecords() const override;
 
         signals:
 
@@ -127,6 +128,8 @@ namespace CSVWorld
         private slots:
 
             void editCell();
+
+            static void openHelp();
 
             void editRecord();
 

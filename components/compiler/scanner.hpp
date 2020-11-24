@@ -28,7 +28,7 @@ namespace Compiler
             blank();
         }
 
-        MultiChar(const char ch)
+        explicit MultiChar(const char ch)
         {
             blank();
             mData[0] = ch;
@@ -36,7 +36,7 @@ namespace Compiler
             mLength = getCharLength(ch);
         }
 
-        int getCharLength(const char ch)
+        static int getCharLength(const char ch)
         {
             unsigned char c = ch;
             if (c<=127) return 0;
@@ -170,8 +170,8 @@ namespace Compiler
         }
 
     private:
-        char mData[4];
-        int mLength;
+        char mData[4]{};
+        int mLength{};
     };
 
     class Scanner
@@ -208,13 +208,7 @@ namespace Compiler
                 K_return,
                 K_messagebox,
                 K_set, K_to,
-                K_getsquareroot,
-                K_menumode,
-                K_random,
-                K_startscript, K_stopscript, K_scriptrunning,
-                K_getdistance,
-                K_getsecondspassed,
-                K_enable, K_disable, K_getdisabled
+                K_getsquareroot
             };
 
             enum special
@@ -257,7 +251,7 @@ namespace Compiler
         public:
 
             Scanner (ErrorHandler& errorHandler, std::istream& inputStream,
-                const Extensions *extensions = 0);
+                const Extensions *extensions = nullptr);
             ///< constructor
 
             void scan (Parser& parser);

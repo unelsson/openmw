@@ -18,6 +18,7 @@
 #include "npcstats.hpp"
 #include "movement.hpp"
 #include "spellcasting.hpp"
+#include "spellresistance.hpp"
 #include "difficultyscaling.hpp"
 #include "actorutil.hpp"
 #include "pathfinding.hpp"
@@ -100,7 +101,7 @@ namespace MWMechanics
             blockerTerm *= gmst.find("fBlockStillBonus")->mValue.getFloat();
         blockerTerm *= blockerStats.getFatigueTerm();
 
-        int attackerSkill = 0;
+        float attackerSkill = 0;
         if (weapon.isEmpty())
             attackerSkill = attacker.getClass().getSkill(attacker, ESM::Skill::HandToHand);
         else
@@ -467,7 +468,7 @@ namespace MWMechanics
         osg::Vec3f pos1 (actor1.getRefData().getPosition().asVec3());
         osg::Vec3f pos2 (actor2.getRefData().getPosition().asVec3());
 
-        float d = getAggroDistance(actor2, pos1, pos2);
+        float d = getAggroDistance(actor1, pos1, pos2);
 
         static const int iFightDistanceBase = MWBase::Environment::get().getWorld()->getStore().get<ESM::GameSetting>().find(
                     "iFightDistanceBase")->mValue.getInteger();

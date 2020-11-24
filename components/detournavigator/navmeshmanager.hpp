@@ -5,6 +5,7 @@
 #include "cachedrecastmeshmanager.hpp"
 #include "offmeshconnectionsmanager.hpp"
 #include "sharednavmesh.hpp"
+#include "recastmeshtiles.hpp"
 
 #include <BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h>
 
@@ -38,9 +39,9 @@ namespace DetourNavigator
 
         bool reset(const osg::Vec3f& agentHalfExtents);
 
-        void addOffMeshConnection(const ObjectId id, const osg::Vec3f& start, const osg::Vec3f& end);
+        void addOffMeshConnection(const ObjectId id, const osg::Vec3f& start, const osg::Vec3f& end, const AreaType areaType);
 
-        void removeOffMeshConnection(const ObjectId id);
+        void removeOffMeshConnections(const ObjectId id);
 
         void update(osg::Vec3f playerPosition, const osg::Vec3f& agentHalfExtents);
 
@@ -51,6 +52,8 @@ namespace DetourNavigator
         std::map<osg::Vec3f, SharedNavMeshCacheItem> getNavMeshes() const;
 
         void reportStats(unsigned int frameNumber, osg::Stats& stats) const;
+
+        RecastMeshTiles getRecastMeshTiles();
 
     private:
         const Settings& mSettings;

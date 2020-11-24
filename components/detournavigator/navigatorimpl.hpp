@@ -4,6 +4,8 @@
 #include "navigator.hpp"
 #include "navmeshmanager.hpp"
 
+#include <set>
+
 namespace DetourNavigator
 {
     class NavigatorImpl final : public Navigator
@@ -13,7 +15,7 @@ namespace DetourNavigator
          * @brief Navigator constructor initializes all internal data. Constructed object is ready to build a scene.
          * @param settings allows to customize navigator work. Constructor is only place to set navigator settings.
          */
-        NavigatorImpl(const Settings& settings);
+        explicit NavigatorImpl(const Settings& settings);
 
         void addAgent(const osg::Vec3f& agentHalfExtents) override;
 
@@ -38,7 +40,13 @@ namespace DetourNavigator
 
         bool removeWater(const osg::Vec2i& cellPosition) override;
 
+        void addPathgrid(const ESM::Cell& cell, const ESM::Pathgrid& pathgrid) override;
+
+        void removePathgrid(const ESM::Pathgrid& pathgrid) override;
+
         void update(const osg::Vec3f& playerPosition) override;
+
+        void setUpdatesEnabled(bool enabled) override;
 
         void wait() override;
 
@@ -50,9 +58,12 @@ namespace DetourNavigator
 
         void reportStats(unsigned int frameNumber, osg::Stats& stats) const override;
 
+        RecastMeshTiles getRecastMeshTiles() override;
+
     private:
         Settings mSettings;
         NavMeshManager mNavMeshManager;
+        bool mUpdatesEnabled;
         std::map<osg::Vec3f, std::size_t> mAgents;
         std::unordered_map<ObjectId, ObjectId> mAvoidIds;
         std::unordered_map<ObjectId, ObjectId> mWaterIds;

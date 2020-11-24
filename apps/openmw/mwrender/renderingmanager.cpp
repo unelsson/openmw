@@ -2,6 +2,8 @@
 
 #include <limits>
 #include <cstdlib>
+#include <condition_variable>
+#include <mutex>
 
 #include <osg/Light>
 #include <osg/LightModel>
@@ -19,6 +21,8 @@
 #include <osg/ImageUtils>
 
 #include <osgViewer/Viewer>
+
+#include <components/nifosg/nifloader.hpp>
 
 #include <components/debug/debuglog.hpp>
 
@@ -40,7 +44,6 @@
 #include <components/sceneutil/unrefqueue.hpp>
 #include <components/sceneutil/writescene.hpp>
 #include <components/sceneutil/shadow.hpp>
-#include <components/sceneutil/vismask.hpp>
 
 #include <components/terrain/terraingrid.hpp>
 #include <components/terrain/quadtreeworld.hpp>
@@ -59,23 +62,19 @@
 #include "sky.hpp"
 #include "effectmanager.hpp"
 #include "npcanimation.hpp"
+#include "vismask.hpp"
 #include "pathgrid.hpp"
 #include "camera.hpp"
+#include "viewovershoulder.hpp"
 #include "water.hpp"
 #include "terrainstorage.hpp"
 #include "util.hpp"
 #include "navmesh.hpp"
 #include "actorspaths.hpp"
+#include "recastmesh.hpp"
+#include "fogmanager.hpp"
+#include "objectpaging.hpp"
 
-namespace
-{
-    float DLLandFogStart;
-    float DLLandFogEnd;
-    float DLUnderwaterFogStart;
-    float DLUnderwaterFogEnd;
-    float DLInteriorFogStart;
-    float DLInteriorFogEnd;
-}
 
 namespace MWRender
 {
@@ -90,7 +89,7 @@ namespace MWRender
         {
         }
 
-        virtual void setDefaults(osg::StateSet *stateset)
+        void setDefaults(osg::StateSet *stateset) override
         {
             osg::LightModel* lightModel = new osg::LightModel;
             stateset->setAttribute(lightModel, osg::StateAttribute::ON);
@@ -107,7 +106,7 @@ namespace MWRender
                 stateset->removeAttribute(osg::StateAttribute::POLYGONMODE);
         }
 
-        virtual void apply(osg::StateSet* stateset, osg::NodeVisitor*)
+        void apply(osg::StateSet* stateset, osg::NodeVisitor*) override
         {
             osg::LightModel* lightModel = static_cast<osg::LightModel*>(stateset->getAttribute(osg::StateAttribute::LIGHTMODEL));
             lightModel->setAmbientIntensity(mAmbientColor);
@@ -167,7 +166,7 @@ namespace MWRender
         {
         }
 
-        virtual void doWork()
+        void doWork() override
         {
             try
             {
@@ -201,23 +200,15 @@ namespace MWRender
         , mWorkQueue(workQueue)
         , mUnrefQueue(new SceneUtil::UnrefQueue)
         , mNavigator(navigator)
-        , mLandFogStart(0.f)
-        , mLandFogEnd(std::numeric_limits<float>::max())
-        , mUnderwaterFogStart(0.f)
-        , mUnderwaterFogEnd(std::numeric_limits<float>::max())
-        , mUnderwaterColor(Fallback::Map::getColour("Water_UnderwaterColor"))
-        , mUnderwaterWeight(Fallback::Map::getFloat("Water_UnderwaterColorWeight"))
-        , mUnderwaterIndoorFog(Fallback::Map::getFloat("Water_UnderwaterIndoorFog"))
         , mNightEyeFactor(0.f)
-        , mDistantFog(false)
-        , mDistantTerrain(false)
         , mFieldOfViewOverridden(false)
         , mFieldOfViewOverride(0.f)
-        , mBorders(false)
     {
-        resourceSystem->getSceneManager()->setParticleSystemMask(SceneUtil::Mask_ParticleSystem);
+        resourceSystem->getSceneManager()->setParticleSystemMask(MWRender::Mask_ParticleSystem);
         resourceSystem->getSceneManager()->setShaderPath(resourcePath + "/shaders");
-        resourceSystem->getSceneManager()->setForceShaders(Settings::Manager::getBool("force shaders", "Shaders") || Settings::Manager::getBool("enable shadows", "Shadows")); // Shadows have problems with fixed-function mode
+        // Shadows and radial fog have problems with fixed-function mode
+        bool forceShaders = Settings::Manager::getBool("radial fog", "Shaders") || Settings::Manager::getBool("force shaders", "Shaders") || Settings::Manager::getBool("enable shadows", "Shadows");
+        resourceSystem->getSceneManager()->setForceShaders(forceShaders);
         // FIXME: calling dummy method because terrain needs to know whether lighting is clamped
         resourceSystem->getSceneManager()->setClampLighting(Settings::Manager::getBool("clamp lighting", "Shaders"));
         resourceSystem->getSceneManager()->setAutoUseNormalMaps(Settings::Manager::getBool("auto use object normal maps", "Shaders"));
@@ -225,23 +216,26 @@ namespace MWRender
         resourceSystem->getSceneManager()->setNormalHeightMapPattern(Settings::Manager::getString("normal height map pattern", "Shaders"));
         resourceSystem->getSceneManager()->setAutoUseSpecularMaps(Settings::Manager::getBool("auto use object specular maps", "Shaders"));
         resourceSystem->getSceneManager()->setSpecularMapPattern(Settings::Manager::getString("specular map pattern", "Shaders"));
+        resourceSystem->getSceneManager()->setApplyLightingToEnvMaps(Settings::Manager::getBool("apply lighting to environment maps", "Shaders"));
 
         osg::ref_ptr<SceneUtil::LightManager> sceneRoot = new SceneUtil::LightManager;
-        sceneRoot->setLightingMask(SceneUtil::Mask_Lighting);
+        sceneRoot->setLightingMask(Mask_Lighting);
         mSceneRoot = sceneRoot;
         sceneRoot->setStartLight(1);
+        sceneRoot->setNodeMask(Mask_Scene);
+        sceneRoot->setName("Scene Root");
 
-        int shadowCastingTraversalMask = SceneUtil::Mask_Scene;
+        int shadowCastingTraversalMask = Mask_Scene;
         if (Settings::Manager::getBool("actor shadows", "Shadows"))
-            shadowCastingTraversalMask |= SceneUtil::Mask_Actor;
+            shadowCastingTraversalMask |= Mask_Actor;
         if (Settings::Manager::getBool("player shadows", "Shadows"))
-            shadowCastingTraversalMask |= SceneUtil::Mask_Player;
+            shadowCastingTraversalMask |= Mask_Player;
         if (Settings::Manager::getBool("terrain shadows", "Shadows"))
-            shadowCastingTraversalMask |= SceneUtil::Mask_Terrain;
+            shadowCastingTraversalMask |= Mask_Terrain;
 
         int indoorShadowCastingTraversalMask = shadowCastingTraversalMask;
         if (Settings::Manager::getBool("object shadows", "Shadows"))
-            shadowCastingTraversalMask |= (SceneUtil::Mask_Object|SceneUtil::Mask_Static);
+            shadowCastingTraversalMask |= (Mask_Object|Mask_Static);
 
         mShadowManager.reset(new SceneUtil::ShadowManager(sceneRoot, mRootNode, shadowCastingTraversalMask, indoorShadowCastingTraversalMask, mResourceSystem->getSceneManager()->getShaderManager()));
 
@@ -253,12 +247,15 @@ namespace MWRender
 
         globalDefines["forcePPL"] = Settings::Manager::getBool("force per pixel lighting", "Shaders") ? "1" : "0";
         globalDefines["clamp"] = Settings::Manager::getBool("clamp lighting", "Shaders") ? "1" : "0";
+        globalDefines["preLightEnv"] = Settings::Manager::getBool("apply lighting to environment maps", "Shaders") ? "1" : "0";
+        globalDefines["radialFog"] = Settings::Manager::getBool("radial fog", "Shaders") ? "1" : "0";
 
         // It is unnecessary to stop/start the viewer as no frames are being rendered yet.
         mResourceSystem->getSceneManager()->getShaderManager().setGlobalDefines(globalDefines);
 
         mNavMesh.reset(new NavMesh(mRootNode, Settings::Manager::getBool("enable nav mesh render", "Navigator")));
         mActorsPaths.reset(new ActorsPaths(mRootNode, Settings::Manager::getBool("enable agents paths render", "Navigator")));
+        mRecastMesh.reset(new RecastMesh(mRootNode, Settings::Manager::getBool("enable recast mesh render", "Navigator")));
         mPathgrid.reset(new Pathgrid(mRootNode));
 
         mObjects.reset(new Objects(mResourceSystem, sceneRoot, mUnrefQueue.get()));
@@ -267,24 +264,11 @@ namespace MWRender
         {
             mViewer->setIncrementalCompileOperation(new osgUtil::IncrementalCompileOperation);
             mViewer->getIncrementalCompileOperation()->setTargetFrameRate(Settings::Manager::getFloat("target framerate", "Cells"));
-            mViewer->getIncrementalCompileOperation()->setMaximumNumOfObjectsToCompilePerFrame(100);
         }
 
         mResourceSystem->getSceneManager()->setIncrementalCompileOperation(mViewer->getIncrementalCompileOperation());
 
         mEffectManager.reset(new EffectManager(sceneRoot, mResourceSystem));
-
-        mWater.reset(new Water(mRootNode, sceneRoot, mResourceSystem, mViewer->getIncrementalCompileOperation(), resourcePath));
-
-        DLLandFogStart = Settings::Manager::getFloat("distant land fog start", "Fog");
-        DLLandFogEnd = Settings::Manager::getFloat("distant land fog end", "Fog");
-        DLUnderwaterFogStart = Settings::Manager::getFloat("distant underwater fog start", "Fog");
-        DLUnderwaterFogEnd = Settings::Manager::getFloat("distant underwater fog end", "Fog");
-        DLInteriorFogStart = Settings::Manager::getFloat("distant interior fog start", "Fog");
-        DLInteriorFogEnd = Settings::Manager::getFloat("distant interior fog end", "Fog");
-
-        mDistantFog = Settings::Manager::getBool("use distant fog", "Fog");
-        mDistantTerrain = Settings::Manager::getBool("distant terrain", "Terrain");
 
         const std::string normalMapPattern = Settings::Manager::getString("normal map pattern", "Shaders");
         const std::string heightMapPattern = Settings::Manager::getString("normal height map pattern", "Shaders");
@@ -294,7 +278,7 @@ namespace MWRender
 
         mTerrainStorage = new TerrainStorage(mResourceSystem, normalMapPattern, heightMapPattern, useTerrainNormalMaps, specularMapPattern, useTerrainSpecularMaps);
 
-        if (mDistantTerrain)
+        if (Settings::Manager::getBool("distant terrain", "Terrain"))
         {
             const int compMapResolution = Settings::Manager::getInt("composite map resolution", "Terrain");
             int compMapPower = Settings::Manager::getInt("composite map level", "Terrain");
@@ -305,20 +289,32 @@ namespace MWRender
             float maxCompGeometrySize = Settings::Manager::getFloat("max composite geometry size", "Terrain");
             maxCompGeometrySize = std::max(maxCompGeometrySize, 1.f);
             mTerrain.reset(new Terrain::QuadTreeWorld(
-                sceneRoot, mRootNode, mResourceSystem, mTerrainStorage, compMapResolution, compMapLevel, lodFactor, vertexLodMod, maxCompGeometrySize));
+                sceneRoot, mRootNode, mResourceSystem, mTerrainStorage, Mask_Terrain, Mask_PreCompile, Mask_Debug,
+                compMapResolution, compMapLevel, lodFactor, vertexLodMod, maxCompGeometrySize));
+            if (Settings::Manager::getBool("object paging", "Terrain"))
+            {
+                mObjectPaging.reset(new ObjectPaging(mResourceSystem->getSceneManager()));
+                static_cast<Terrain::QuadTreeWorld*>(mTerrain.get())->addChunkManager(mObjectPaging.get());
+                mResourceSystem->addResourceManager(mObjectPaging.get());
+            }
         }
         else
-            mTerrain.reset(new Terrain::TerrainGrid(sceneRoot, mRootNode, mResourceSystem, mTerrainStorage));
+            mTerrain.reset(new Terrain::TerrainGrid(sceneRoot, mRootNode, mResourceSystem, mTerrainStorage, Mask_Terrain, Mask_PreCompile, Mask_Debug));
 
         mTerrain->setTargetFrameRate(Settings::Manager::getFloat("target framerate", "Cells"));
         mTerrain->setWorkQueue(mWorkQueue.get());
 
+        // water goes after terrain for correct waterculling order
+        mWater.reset(new Water(mRootNode, sceneRoot, mResourceSystem, mViewer->getIncrementalCompileOperation(), resourcePath));
+
         mCamera.reset(new Camera(mViewer->getCamera()));
+        if (Settings::Manager::getBool("view over shoulder", "Camera"))
+            mViewOverShoulderController.reset(new ViewOverShoulderController(mCamera.get()));
 
         mViewer->setLightingMode(osgViewer::View::NO_LIGHT);
 
         osg::ref_ptr<osg::LightSource> source = new osg::LightSource;
-        source->setNodeMask(SceneUtil::Mask_Lighting);
+        source->setNodeMask(Mask_Lighting);
         mSunLight = new osg::Light;
         source->setLight(mSunLight);
         mSunLight->setDiffuse(osg::Vec4f(0,0,0,1));
@@ -337,11 +333,9 @@ namespace MWRender
         defaultMat->setSpecular(osg::Material::FRONT_AND_BACK, osg::Vec4f(0.f, 0.f, 0.f, 0.f));
         sceneRoot->getOrCreateStateSet()->setAttribute(defaultMat);
 
-        sceneRoot->setNodeMask(SceneUtil::Mask_Scene);
-        sceneRoot->setName("Scene Root");
+        mFog.reset(new FogManager());
 
         mSky.reset(new SkyManager(sceneRoot, resourceSystem->getSceneManager()));
-
         mSky->setCamera(mViewer->getCamera());
         mSky->setRainIntensityUniform(mWater->getRainIntensityUniform());
 
@@ -365,7 +359,10 @@ namespace MWRender
         mViewer->getCamera()->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
         mViewer->getCamera()->setCullingMode(cullingMode);
 
-        mViewer->getCamera()->setCullMask(~(SceneUtil::Mask_UpdateVisitor|SceneUtil::Mask_SimpleWater));
+        mViewer->getCamera()->setCullMask(~(Mask_UpdateVisitor|Mask_SimpleWater));
+        NifOsg::Loader::setHiddenNodeMask(Mask_UpdateVisitor);
+        NifOsg::Loader::setIntersectionDisabledNodeMask(Mask_Effect);
+        Nif::NIFFile::setLoadUnsupportedFiles(Settings::Manager::getBool("load unsupported nif files", "Models"));
 
         mNearClip = Settings::Manager::getFloat("near clip", "Camera");
         mViewDistance = Settings::Manager::getFloat("viewing distance", "Camera");
@@ -377,6 +374,7 @@ namespace MWRender
 
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("near", mNearClip));
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("far", mViewDistance));
+        mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("simpleWater", false));
 
         mUniformNear = mRootNode->getOrCreateStateSet()->getUniform("near");
         mUniformFar = mRootNode->getOrCreateStateSet()->getUniform("far");
@@ -432,7 +430,7 @@ namespace MWRender
             workItem->mKeyframes.push_back(std::string("meshes/") + basemodels[i] + ".kf");
         }
 
-        workItem->mTextures.push_back("textures/_land_default.dds");
+        workItem->mTextures.emplace_back("textures/_land_default.dds");
 
         mWorkQueue->addWorkItem(workItem);
     }
@@ -531,6 +529,8 @@ namespace MWRender
 
     void RenderingManager::enableTerrain(bool enable)
     {
+        if (!enable)
+            mWater->setCullCallback(nullptr);
         mTerrain->enable(enable);
     }
 
@@ -545,9 +545,9 @@ namespace MWRender
 
     bool RenderingManager::toggleBorders()
     {
-        mBorders = !mBorders;
-        mTerrain->setBordersVisible(mBorders);
-        return mBorders;
+        bool borders = !mTerrain->getBordersVisible();
+        mTerrain->setBordersVisible(borders);
+        return borders;
     }
 
     bool RenderingManager::toggleRenderMode(RenderMode mode)
@@ -567,12 +567,12 @@ namespace MWRender
         else if (mode == Render_Scene)
         {
             int mask = mViewer->getCamera()->getCullMask();
-            bool enabled = mask & SceneUtil::Mask_Scene;
+            bool enabled = mask&Mask_Scene;
             enabled = !enabled;
             if (enabled)
-                mask |= SceneUtil::Mask_Scene;
+                mask |= Mask_Scene;
             else
-                mask &= ~SceneUtil::Mask_Scene;
+                mask &= ~Mask_Scene;
             mViewer->getCamera()->setCullMask(mask);
             return enabled;
         }
@@ -584,51 +584,21 @@ namespace MWRender
         {
             return mActorsPaths->toggle();
         }
+        else if (mode == Render_RecastMesh)
+        {
+            return mRecastMesh->toggle();
+        }
         return false;
     }
 
     void RenderingManager::configureFog(const ESM::Cell *cell)
     {
-        osg::Vec4f color = SceneUtil::colourFromRGB(cell->mAmbi.mFog);
-
-        if(mDistantFog)
-        {
-            float density = std::max(0.2f, cell->mAmbi.mFogDensity);
-            mLandFogStart = (DLInteriorFogEnd*(1.0f-density) + DLInteriorFogStart*density);
-            mLandFogEnd = DLInteriorFogEnd;
-            mUnderwaterFogStart = DLUnderwaterFogStart;
-            mUnderwaterFogEnd = DLUnderwaterFogEnd;
-            mFogColor = color;
-        }
-        else
-            configureFog(cell->mAmbi.mFogDensity, mUnderwaterIndoorFog, 1.0f, 0.0f, color);
+        mFog->configure(mViewDistance, cell);
     }
 
     void RenderingManager::configureFog(float fogDepth, float underwaterFog, float dlFactor, float dlOffset, const osg::Vec4f &color)
     {
-        if(mDistantFog)
-        {
-            mLandFogStart = dlFactor * (DLLandFogStart - dlOffset*DLLandFogEnd);
-            mLandFogEnd = dlFactor * (1.0f-dlOffset) * DLLandFogEnd;
-            mUnderwaterFogStart = DLUnderwaterFogStart;
-            mUnderwaterFogEnd = DLUnderwaterFogEnd;
-        }
-        else
-        {
-            if(fogDepth == 0.0)
-            {
-                mLandFogStart = 0.0f;
-                mLandFogEnd = std::numeric_limits<float>::max();
-            }
-            else
-            {
-                mLandFogStart = mViewDistance * (1 - fogDepth);
-                mLandFogEnd = mViewDistance;
-            }
-            mUnderwaterFogStart = std::min(mViewDistance, 6666.f) * (1 - underwaterFog);
-            mUnderwaterFogEnd = std::min(mViewDistance, 6666.f);
-        }
-        mFogColor = color;
+        mFog->configure(mViewDistance, fogDepth, underwaterFog, dlFactor, dlOffset, color);
     }
 
     SkyManager* RenderingManager::getSkyManager()
@@ -650,25 +620,20 @@ namespace MWRender
         }
 
         updateNavMesh();
+        updateRecastMesh();
 
+        if (mViewOverShoulderController)
+            mViewOverShoulderController->update();
         mCamera->update(dt, paused);
 
-        osg::Vec3f focal, cameraPos;
+        osg::Vec3d focal, cameraPos;
         mCamera->getPosition(focal, cameraPos);
         mCurrentCameraPos = cameraPos;
-        if (mWater->isUnderwater(cameraPos))
-        {
-            setFogColor(mUnderwaterColor * mUnderwaterWeight + mFogColor * (1.f-mUnderwaterWeight));
-            mStateUpdater->setFogStart(mUnderwaterFogStart);
-            mStateUpdater->setFogEnd(mUnderwaterFogEnd);
-        }
-        else
-        {
-            setFogColor(mFogColor);
 
-            mStateUpdater->setFogStart(mLandFogStart);
-            mStateUpdater->setFogEnd(mLandFogEnd);
-        }
+        bool isUnderwater = mWater->isUnderwater(cameraPos);
+        mStateUpdater->setFogStart(mFog->getFogStart(isUnderwater));
+        mStateUpdater->setFogEnd(mFog->getFogEnd(isUnderwater));
+        setFogColor(mFog->getFogColor(isUnderwater));
     }
 
     void RenderingManager::updatePlayerPtr(const MWWorld::Ptr &ptr)
@@ -691,7 +656,7 @@ namespace MWRender
         if(ptr == mCamera->getTrackingPtr() &&
            !mCamera->isVanityOrPreviewModeEnabled())
         {
-            mCamera->rotateCamera(-ptr.getRefData().getPosition().rot[0], -ptr.getRefData().getPosition().rot[2], false);
+            mCamera->rotateCameraToTrackingPtr();
         }
 
         ptr.getRefData().getBaseNode()->setAttitude(rot);
@@ -725,6 +690,7 @@ namespace MWRender
 
     void RenderingManager::setWaterHeight(float height)
     {
+        mWater->setCullCallback(mTerrain->getHeightCullCallback(height, Mask_Water));
         mWater->setHeight(height);
         mSky->setWaterHeight(height);
     }
@@ -732,31 +698,33 @@ namespace MWRender
     class NotifyDrawCompletedCallback : public osg::Camera::DrawCallback
     {
     public:
-        NotifyDrawCompletedCallback()
-            : mDone(false)
+        NotifyDrawCompletedCallback(unsigned int frame)
+            : mDone(false), mFrame(frame)
         {
         }
 
-        virtual void operator () (osg::RenderInfo& renderInfo) const
+        void operator () (osg::RenderInfo& renderInfo) const override
         {
-            mMutex.lock();
-            mDone = true;
-            mMutex.unlock();
-            mCondition.signal();
+            std::lock_guard<std::mutex> lock(mMutex);
+            if (renderInfo.getState()->getFrameStamp()->getFrameNumber() >= mFrame)
+            {
+                mDone = true;
+                mCondition.notify_one();
+            }
         }
 
         void waitTillDone()
         {
-            mMutex.lock();
+            std::unique_lock<std::mutex> lock(mMutex);
             if (mDone)
                 return;
-            mCondition.wait(&mMutex);
-            mMutex.unlock();
+            mCondition.wait(lock);
         }
 
-        mutable OpenThreads::Condition mCondition;
-        mutable OpenThreads::Mutex mMutex;
+        mutable std::condition_variable mCondition;
+        mutable std::mutex mMutex;
         mutable bool mDone;
+        unsigned int mFrame;
     };
 
     bool RenderingManager::screenshot360(osg::Image* image, std::string settingStr)
@@ -840,7 +808,7 @@ namespace MWRender
         int maskBackup = mPlayerAnimation->getObjectRoot()->getNodeMask();
 
         if (mCamera->isFirstPerson())
-            mPlayerAnimation->getObjectRoot()->setNodeMask(SceneUtil::Mask_Disabled);
+            mPlayerAnimation->getObjectRoot()->setNodeMask(0);
 
         for (int i = 0; i < 6; ++i)      // for each cubemap side
         {
@@ -914,7 +882,7 @@ namespace MWRender
 
     void RenderingManager::renderCameraToImage(osg::Camera *camera, osg::Image *image, int w, int h)
     {
-        camera->setNodeMask(SceneUtil::Mask_RenderToTexture);
+        camera->setNodeMask(Mask_RenderToTexture);
         camera->attach(osg::Camera::COLOR_BUFFER, image);
         camera->setRenderOrder(osg::Camera::PRE_RENDER);
         camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
@@ -936,7 +904,7 @@ namespace MWRender
         mRootNode->addChild(camera);
 
         // The draw needs to complete before we can copy back our image.
-        osg::ref_ptr<NotifyDrawCompletedCallback> callback (new NotifyDrawCompletedCallback);
+        osg::ref_ptr<NotifyDrawCompletedCallback> callback (new NotifyDrawCompletedCallback(0));
         camera->setFinalDrawCallback(callback);
 
         MWBase::Environment::get().getWindowManager()->getLoadingScreen()->loadingOn(false);
@@ -955,6 +923,51 @@ namespace MWRender
         mRootNode->removeChild(camera);
     }
 
+    class ReadImageFromFramebufferCallback : public osg::Drawable::DrawCallback
+    {
+    public:
+        ReadImageFromFramebufferCallback(osg::Image* image, int width, int height)
+            : mWidth(width), mHeight(height), mImage(image)
+        {
+        }
+        void drawImplementation(osg::RenderInfo& renderInfo,const osg::Drawable* /*drawable*/) const override
+        {
+            int screenW = renderInfo.getCurrentCamera()->getViewport()->width();
+            int screenH = renderInfo.getCurrentCamera()->getViewport()->height();
+            double imageaspect = (double)mWidth/(double)mHeight;
+            int leftPadding = std::max(0, static_cast<int>(screenW - screenH * imageaspect) / 2);
+            int topPadding = std::max(0, static_cast<int>(screenH - screenW / imageaspect) / 2);
+            int width = screenW - leftPadding*2;
+            int height = screenH - topPadding*2;
+            mImage->readPixels(leftPadding, topPadding, width, height, GL_RGB, GL_UNSIGNED_BYTE);
+            mImage->scaleImage(mWidth, mHeight, 1);
+        }
+    private:
+        int mWidth;
+        int mHeight;
+        osg::ref_ptr<osg::Image> mImage;
+    };
+
+    void RenderingManager::screenshotFramebuffer(osg::Image* image, int w, int h)
+    {
+        osg::Camera* camera = mViewer->getCamera();
+        osg::ref_ptr<osg::Drawable> tempDrw = new osg::Drawable;
+        tempDrw->setDrawCallback(new ReadImageFromFramebufferCallback(image, w, h));
+        tempDrw->setCullingActive(false);
+        tempDrw->getOrCreateStateSet()->setRenderBinDetails(100, "RenderBin", osg::StateSet::USE_RENDERBIN_DETAILS); // so its after all scene bins but before POST_RENDER gui camera
+        camera->addChild(tempDrw);
+        osg::ref_ptr<NotifyDrawCompletedCallback> callback (new NotifyDrawCompletedCallback(mViewer->getFrameStamp()->getFrameNumber()));
+        camera->setFinalDrawCallback(callback);
+        mViewer->eventTraversal();
+        mViewer->updateTraversal();
+        mViewer->renderingTraversals();
+        callback->waitTillDone();
+        // now that we've "used up" the current frame, get a fresh frame number for the next frame() following after the screenshot is completed
+        mViewer->advance(mViewer->getFrameStamp()->getSimulationTime());
+        camera->removeChild(tempDrw);
+        camera->setFinalDrawCallback(nullptr);
+    }
+
     void RenderingManager::screenshot(osg::Image *image, int w, int h, osg::Matrixd cameraTransform)
     {
         osg::ref_ptr<osg::Camera> rttCamera (new osg::Camera);
@@ -967,27 +980,21 @@ namespace MWRender
         rttCamera->addChild(mWater->getReflectionCamera());
         rttCamera->addChild(mWater->getRefractionCamera());
 
-        rttCamera->setCullMask(mViewer->getCamera()->getCullMask() & (~SceneUtil::Mask_GUI));
+        rttCamera->setCullMask(mViewer->getCamera()->getCullMask() & (~Mask_GUI));
 
         rttCamera->setClearMask(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         renderCameraToImage(rttCamera.get(),image,w,h);
     }
 
-    osg::Vec4f RenderingManager::getScreenBounds(const MWWorld::Ptr& ptr)
+    osg::Vec4f RenderingManager::getScreenBounds(const osg::BoundingBox &worldbb)
     {
-        if (!ptr.getRefData().getBaseNode())
-            return osg::Vec4f();
-
-        osg::ComputeBoundsVisitor computeBoundsVisitor;
-        computeBoundsVisitor.setTraversalMask(~(SceneUtil::Mask_ParticleSystem|SceneUtil::Mask_Effect));
-        ptr.getRefData().getBaseNode()->accept(computeBoundsVisitor);
-
+        if (!worldbb.valid()) return osg::Vec4f();
         osg::Matrix viewProj = mViewer->getCamera()->getViewMatrix() * mViewer->getCamera()->getProjectionMatrix();
         float min_x = 1.0f, max_x = 0.0f, min_y = 1.0f, max_y = 0.0f;
         for (int i=0; i<8; ++i)
         {
-            osg::Vec3f corner = computeBoundsVisitor.getBoundingBox().corner(i);
+            osg::Vec3f corner = worldbb.corner(i);
             corner = corner * viewProj;
 
             float x = (corner.x() + 1.f) * 0.5f;
@@ -1013,6 +1020,7 @@ namespace MWRender
     {
         RenderingManager::RayResult result;
         result.mHit = false;
+        result.mHitRefnum.mContentFile = -1;
         result.mRatio = 0;
         if (intersector->containsIntersections())
         {
@@ -1024,6 +1032,7 @@ namespace MWRender
             result.mRatio = intersection.ratio;
 
             PtrHolder* ptrHolder = nullptr;
+            std::vector<RefnumMarker*> refnumMarkers;
             for (osg::NodePath::const_iterator it = intersection.nodePath.begin(); it != intersection.nodePath.end(); ++it)
             {
                 osg::UserDataContainer* userDataContainer = (*it)->getUserDataContainer();
@@ -1033,11 +1042,25 @@ namespace MWRender
                 {
                     if (PtrHolder* p = dynamic_cast<PtrHolder*>(userDataContainer->getUserObject(i)))
                         ptrHolder = p;
+                    if (RefnumMarker* r = dynamic_cast<RefnumMarker*>(userDataContainer->getUserObject(i)))
+                        refnumMarkers.push_back(r);
                 }
             }
 
             if (ptrHolder)
                 result.mHitObject = ptrHolder->mPtr;
+
+            unsigned int vertexCounter = 0;
+            for (unsigned int i=0; i<refnumMarkers.size(); ++i)
+            {
+                unsigned int intersectionIndex = intersection.indexList.empty() ? 0 : intersection.indexList[0];
+                if (!refnumMarkers[i]->mNumVertices || (intersectionIndex >= vertexCounter && intersectionIndex < vertexCounter + refnumMarkers[i]->mNumVertices))
+                {
+                    result.mHitRefnum = refnumMarkers[i]->mRefnum;
+                    break;
+                }
+                vertexCounter += refnumMarkers[i]->mNumVertices;
+            }
         }
 
         return result;
@@ -1050,13 +1073,15 @@ namespace MWRender
             mIntersectionVisitor = new osgUtil::IntersectionVisitor;
 
         mIntersectionVisitor->setTraversalNumber(mViewer->getFrameStamp()->getFrameNumber());
+        mIntersectionVisitor->setFrameStamp(mViewer->getFrameStamp());
         mIntersectionVisitor->setIntersector(intersector);
 
-        int mask = ~(SceneUtil::Mask_RenderToTexture|SceneUtil::Mask_Sky|SceneUtil::Mask_Pathgrid|SceneUtil::Mask_Debug|SceneUtil::Mask_Effect|SceneUtil::Mask_Water|SceneUtil::Mask_SimpleWater);
+        int mask = ~0;
+        mask &= ~(Mask_RenderToTexture|Mask_Sky|Mask_Debug|Mask_Effect|Mask_Water|Mask_SimpleWater);
         if (ignorePlayer)
-            mask &= ~(SceneUtil::Mask_Player);
+            mask &= ~(Mask_Player);
         if (ignoreActors)
-            mask &= ~(SceneUtil::Mask_Actor|SceneUtil::Mask_Player);
+            mask &= ~(Mask_Actor|Mask_Player);
 
         mIntersectionVisitor->setTraversalMask(mask);
         return mIntersectionVisitor;
@@ -1114,6 +1139,8 @@ namespace MWRender
         mSky->setMoonColour(false);
 
         notifyWorldSpaceChanged();
+        if (mObjectPaging)
+            mObjectPaging->clear();
     }
 
     MWRender::Animation* RenderingManager::getAnimation(const MWWorld::Ptr &ptr)
@@ -1137,7 +1164,7 @@ namespace MWRender
         if (!mPlayerNode)
         {
             mPlayerNode = new SceneUtil::PositionAttitudeTransform;
-            mPlayerNode->setNodeMask(SceneUtil::Mask_Player);
+            mPlayerNode->setNodeMask(Mask_Player);
             mPlayerNode->setName("Player Root");
             mSceneRoot->addChild(mPlayerNode);
         }
@@ -1268,7 +1295,7 @@ namespace MWRender
             else if (it->first == "Camera" && it->second == "viewing distance")
             {
                 mViewDistance = Settings::Manager::getFloat("viewing distance", "Camera");
-                if(!mDistantFog)
+                if(!Settings::Manager::getBool("use distant fog", "Fog"))
                     mStateUpdater->setFogEnd(mViewDistance);
                 updateProjectionMatrix();
             }
@@ -1291,77 +1318,6 @@ namespace MWRender
         return mTerrain->getHeightAt(pos);
     }
 
-    bool RenderingManager::vanityRotateCamera(const float *rot)
-    {
-        if(!mCamera->isVanityOrPreviewModeEnabled())
-            return false;
-
-        mCamera->rotateCamera(rot[0], rot[2], true);
-        return true;
-    }
-
-    void RenderingManager::setCameraDistance(float dist, bool adjust, bool override)
-    {
-        if(!mCamera->isVanityOrPreviewModeEnabled() && !mCamera->isFirstPerson())
-        {
-            if(mCamera->isNearest() && dist > 0.f)
-                mCamera->toggleViewMode();
-            else
-                mCamera->setCameraDistance(-dist / 120.f * 10, adjust, override);
-        }
-        else if(mCamera->isFirstPerson() && dist < 0.f)
-        {
-            mCamera->toggleViewMode();
-            mCamera->setCameraDistance(0.f, false, override);
-        }
-    }
-
-    void RenderingManager::resetCamera()
-    {
-        mCamera->reset();
-    }
-
-    float RenderingManager::getCameraDistance() const
-    {
-        return mCamera->getCameraDistance();
-    }
-
-    Camera* RenderingManager::getCamera()
-    {
-        return mCamera.get();
-    }
-
-    const osg::Vec3f &RenderingManager::getCameraPosition() const
-    {
-        return mCurrentCameraPos;
-    }
-
-    void RenderingManager::togglePOV(bool force)
-    {
-        mCamera->toggleViewMode(force);
-    }
-
-    void RenderingManager::togglePreviewMode(bool enable)
-    {
-        mCamera->togglePreviewMode(enable);
-    }
-
-    bool RenderingManager::toggleVanityMode(bool enable)
-    {
-        return mCamera->toggleVanityMode(enable);
-    }
-
-    void RenderingManager::allowVanityMode(bool allow)
-    {
-        mCamera->allowVanityMode(allow);
-    }
-
-    void RenderingManager::changeVanityModeScale(float factor)
-    {
-        if(mCamera->isVanityOrPreviewModeEnabled())
-            mCamera->setCameraDistance(-factor/120.f*10, true, true);
-    }
-
     void RenderingManager::overrideFieldOfView(float val)
     {
         if (mFieldOfViewOverridden != true || mFieldOfViewOverride != val)
@@ -1381,7 +1337,7 @@ namespace MWRender
 
         osg::ref_ptr<const osg::Node> node = mResourceSystem->getSceneManager()->getTemplate(modelName);
         osg::ComputeBoundsVisitor computeBoundsVisitor;
-        computeBoundsVisitor.setTraversalMask(~(SceneUtil::Mask_ParticleSystem|SceneUtil::Mask_Effect));
+        computeBoundsVisitor.setTraversalMask(~(MWRender::Mask_ParticleSystem|MWRender::Mask_Effect));
         const_cast<osg::Node*>(node.get())->accept(computeBoundsVisitor);
         osg::BoundingBox bounds = computeBoundsVisitor.getBoundingBox();
 
@@ -1461,5 +1417,52 @@ namespace MWRender
                 Log(Debug::Error) << "NavMesh render update exception: " << e.what();
             }
         }
+    }
+
+    void RenderingManager::updateRecastMesh()
+    {
+        if (!mRecastMesh->isEnabled())
+            return;
+
+        mRecastMesh->update(mNavigator.getRecastMeshTiles(), mNavigator.getSettings());
+    }
+
+    void RenderingManager::setActiveGrid(const osg::Vec4i &grid)
+    {
+        mTerrain->setActiveGrid(grid);
+    }
+    bool RenderingManager::pagingEnableObject(int type, const MWWorld::ConstPtr& ptr, bool enabled)
+    {
+        if (!ptr.isInCell() || !ptr.getCell()->isExterior() || !mObjectPaging)
+            return false;
+        if (mObjectPaging->enableObject(type, ptr.getCellRef().getRefNum(), ptr.getCellRef().getPosition().asVec3(), osg::Vec2i(ptr.getCell()->getCell()->getGridX(), ptr.getCell()->getCell()->getGridY()), enabled))
+        {
+            mTerrain->rebuildViews();
+            return true;
+        }
+        return false;
+    }
+    void RenderingManager::pagingBlacklistObject(int type, const MWWorld::ConstPtr &ptr)
+    {
+        if (!ptr.isInCell() || !ptr.getCell()->isExterior() || !mObjectPaging)
+            return;
+        const ESM::RefNum & refnum = ptr.getCellRef().getRefNum();
+        if (!refnum.hasContentFile()) return;
+        if (mObjectPaging->blacklistObject(type, refnum, ptr.getCellRef().getPosition().asVec3(), osg::Vec2i(ptr.getCell()->getCell()->getGridX(), ptr.getCell()->getCell()->getGridY())))
+            mTerrain->rebuildViews();
+    }
+    bool RenderingManager::pagingUnlockCache()
+    {
+        if (mObjectPaging && mObjectPaging->unlockCache())
+        {
+            mTerrain->rebuildViews();
+            return true;
+        }
+        return false;
+    }
+    void RenderingManager::getPagedRefnums(const osg::Vec4i &activeGrid, std::set<ESM::RefNum> &out)
+    {
+        if (mObjectPaging)
+            mObjectPaging->getPagedRefnums(activeGrid, out);
     }
 }

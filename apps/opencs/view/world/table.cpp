@@ -7,6 +7,7 @@
 #include <QString>
 #include <QtCore/qnamespace.h>
 
+#include <components/misc/helpviewer.hpp>
 #include <components/misc/stringops.hpp>
 
 #include "../../model/doc/document.hpp"
@@ -155,6 +156,9 @@ void CSVWorld::Table::contextMenuEvent (QContextMenuEvent *event)
         }
     }
 
+    if (mHelpAction)
+        menu.addAction (mHelpAction);
+
     menu.exec (event->globalPos());
 }
 
@@ -258,11 +262,7 @@ CSVWorld::Table::Table (const CSMWorld::UniversalId& id,
     mDispatcher = new CSMWorld::CommandDispatcher (document, id, this);
 
     setModel (mProxyModel);
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     horizontalHeader()->setSectionResizeMode (QHeaderView::Interactive);
-#else
-    horizontalHeader()->setResizeMode (QHeaderView::Interactive);
-#endif
     verticalHeader()->hide();
     setSelectionBehavior (QAbstractItemView::SelectRows);
     setSelectionMode (QAbstractItemView::ExtendedSelection);
@@ -387,6 +387,13 @@ CSVWorld::Table::Table (const CSMWorld::UniversalId& id,
     connect (mEditIdAction, SIGNAL (triggered()), this, SLOT (editCell()));
     addAction (mEditIdAction);
 
+    mHelpAction = new QAction (tr ("Help"), this);
+    connect (mHelpAction, SIGNAL (triggered()), this, SLOT (openHelp()));
+    mHelpAction->setIcon(QIcon(":/info.png"));
+    addAction (mHelpAction);
+    CSMPrefs::Shortcut* openHelpShortcut = new CSMPrefs::Shortcut("help", this);
+    openHelpShortcut->associateAction(mHelpAction);
+
     connect (mProxyModel, SIGNAL (rowsRemoved (const QModelIndex&, int, int)),
         this, SLOT (tableSizeUpdate()));
 
@@ -445,7 +452,7 @@ std::vector<std::string> CSVWorld::Table::getSelectedIds() const
          ++iter)
     {
         int row = mProxyModel->mapToSource (mProxyModel->index (iter->row(), 0)).row();
-        ids.push_back (mModel->data (mModel->index (row, columnIndex)).toString().toUtf8().constData());
+        ids.emplace_back(mModel->data (mModel->index (row, columnIndex)).toString().toUtf8().constData());
     }
     return ids;
 }
@@ -561,6 +568,11 @@ void CSVWorld::Table::editCell()
     emit editRequest(mEditIdAction->getCurrentId(), "");
 }
 
+void CSVWorld::Table::openHelp()
+{
+    Misc::HelpViewer::openHelp("manuals/openmw-cs/tables.html");
+}
+
 void CSVWorld::Table::viewRecord()
 {
     if (!(mModel->getFeatures() & CSMWorld::IdTableBase::Feature_View))
@@ -659,7 +671,7 @@ void CSVWorld::Table::settingChanged (const CSMPrefs::Setting *setting)
     {
         std::string modifierString = setting->getKey().substr (6);
 
-        Qt::KeyboardModifiers modifiers = 0;
+        Qt::KeyboardModifiers modifiers;
 
         if (modifierString=="-s")
             modifiers = Qt::ShiftModifier;
@@ -772,7 +784,7 @@ std::vector<std::string> CSVWorld::Table::getColumnsWithDisplay(CSMWorld::Column
 
         if (display == columndisplay)
         {
-            titles.push_back(mModel->headerData (i, Qt::Horizontal).toString().toUtf8().constData());
+            titles.emplace_back(mModel->headerData (i, Qt::Horizontal).toString().toUtf8().constData());
         }
     }
     return titles;

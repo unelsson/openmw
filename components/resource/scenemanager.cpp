@@ -40,7 +40,7 @@ namespace
     class InitWorldSpaceParticlesCallback : public osg::NodeCallback
     {
     public:
-        virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+        void operator()(osg::Node* node, osg::NodeVisitor* nv) override
         {
             osgParticle::ParticleSystem* partsys = static_cast<osgParticle::ParticleSystem*>(node);
 
@@ -91,7 +91,7 @@ namespace
                     && partsys->getUserDataContainer()->getDescriptions()[0] == "worldspace");
         }
 
-        void apply(osg::Drawable& drw)
+        void apply(osg::Drawable& drw) override
         {
             if (osgParticle::ParticleSystem* partsys = dynamic_cast<osgParticle::ParticleSystem*>(&drw))
             {
@@ -126,7 +126,7 @@ namespace Resource
 
         void clearCache()
         {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_listMutex);
+            std::lock_guard<OpenThreads::Mutex> lock(_listMutex);
             _sharedTextureList.clear();
             _sharedStateSetList.clear();
         }
@@ -143,7 +143,7 @@ namespace Resource
         {
         }
 
-        virtual void visit(osg::Node& node, SceneUtil::Controller& ctrl)
+        void visit(osg::Node& node, SceneUtil::Controller& ctrl) override
         {
             if (NifOsg::FlipController* flipctrl = dynamic_cast<NifOsg::FlipController*>(&ctrl))
             {
@@ -175,7 +175,7 @@ namespace Resource
         {
         }
 
-        virtual void apply(osg::Node& node)
+        void apply(osg::Node& node) override
         {
             osg::StateSet* stateset = node.getStateSet();
             if (stateset)
@@ -220,6 +220,7 @@ namespace Resource
         , mClampLighting(true)
         , mAutoUseNormalMaps(false)
         , mAutoUseSpecularMaps(false)
+        , mApplyLightingToEnvMaps(false)
         , mInstanceCache(new MultiObjectCache)
         , mSharedStateManager(new SharedStateManager)
         , mImageManager(imageManager)
@@ -242,9 +243,9 @@ namespace Resource
         return mForceShaders;
     }
 
-    void SceneManager::recreateShaders(osg::ref_ptr<osg::Node> node)
+    void SceneManager::recreateShaders(osg::ref_ptr<osg::Node> node, const std::string& shaderPrefix)
     {
-        osg::ref_ptr<Shader::ShaderVisitor> shaderVisitor(createShaderVisitor());
+        osg::ref_ptr<Shader::ShaderVisitor> shaderVisitor(createShaderVisitor(shaderPrefix));
         shaderVisitor->setAllowedToModifyStateSets(false);
         node->accept(*shaderVisitor);
     }
@@ -284,6 +285,11 @@ namespace Resource
         mSpecularMapPattern = pattern;
     }
 
+    void SceneManager::setApplyLightingToEnvMaps(bool apply)
+    {
+        mApplyLightingToEnvMaps = apply;
+    }
+
     SceneManager::~SceneManager()
     {
         // this has to be defined in the .cpp file as we can't delete incomplete types
@@ -316,7 +322,7 @@ namespace Resource
         {
         }
 
-        virtual osgDB::ReaderWriter::ReadResult readImage(const std::string& filename, const osgDB::Options* options)
+        osgDB::ReaderWriter::ReadResult readImage(const std::string& filename, const osgDB::Options* options) override
         {
             try
             {
@@ -360,6 +366,7 @@ namespace Resource
             // Note, for some formats (.obj/.mtl) that reference other (non-image) files a findFileCallback would be necessary.
             // but findFileCallback does not support virtual files, so we can't implement it.
             options->setReadFileCallback(new ImageReadCallback(imageManager));
+            if (ext == "dae") options->setOptionString("daeUseSequencedTextureUnits");
 
             osgDB::ReaderWriter::ReadResult result = reader->readNode(*file, options);
             if (!result.success())
@@ -399,7 +406,7 @@ namespace Resource
             return it != reservedNames.end();
         }
 
-        virtual bool isOperationPermissibleForObjectImplementation(const SceneUtil::Optimizer* optimizer, const osg::Drawable* node,unsigned int option) const
+        bool isOperationPermissibleForObjectImplementation(const SceneUtil::Optimizer* optimizer, const osg::Drawable* node,unsigned int option) const override
         {
             if (option & SceneUtil::Optimizer::FLATTEN_STATIC_TRANSFORMS)
             {
@@ -411,7 +418,7 @@ namespace Resource
             return (option & optimizer->getPermissibleOptimizationsForObject(node))!=0;
         }
 
-        virtual bool isOperationPermissibleForObjectImplementation(const SceneUtil::Optimizer* optimizer, const osg::Node* node,unsigned int option) const
+        bool isOperationPermissibleForObjectImplementation(const SceneUtil::Optimizer* optimizer, const osg::Node* node,unsigned int option) const override
         {
             if (node->getNumDescriptions()>0) return false;
             if (node->getDataVariance() == osg::Object::DYNAMIC) return false;
@@ -466,7 +473,7 @@ namespace Resource
         return options;
     }
 
-    osg::ref_ptr<const osg::Node> SceneManager::getTemplate(const std::string &name)
+    osg::ref_ptr<const osg::Node> SceneManager::getTemplate(const std::string &name, bool compile)
     {
         std::string normalized = name;
         mVFS->normalizeFilename(normalized);
@@ -529,7 +536,7 @@ namespace Resource
                 optimizer.optimize(loaded, options);
             }
 
-            if (mIncrementalCompileOperation)
+            if (compile && mIncrementalCompileOperation)
                 mIncrementalCompileOperation->add(loaded);
             else
                 loaded->getBound();
@@ -577,7 +584,7 @@ namespace Resource
 
     osg::ref_ptr<osg::Node> SceneManager::createInstance(const osg::Node *base)
     {
-        osg::ref_ptr<osg::Node> cloned = osg::clone(base, SceneUtil::CopyOp());
+        osg::ref_ptr<osg::Node> cloned = static_cast<osg::Node*>(base->clone(SceneUtil::CopyOp()));
 
         // add a ref to the original template, to hint to the cache that it's still being used and should be kept in cache
         cloned->getOrCreateUserDataContainer()->addUserObject(new TemplateRef(base));
@@ -624,7 +631,7 @@ namespace Resource
 
         mShaderManager->releaseGLObjects(state);
 
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mSharedStateMutex);
+        std::lock_guard<std::mutex> lock(mSharedStateMutex);
         mSharedStateManager->releaseGLObjects(state);
     }
 
@@ -713,13 +720,31 @@ namespace Resource
         mSharedStateMutex.lock();
         mSharedStateManager->prune();
         mSharedStateMutex.unlock();
+
+        if (mIncrementalCompileOperation)
+        {
+            std::lock_guard<OpenThreads::Mutex> lock(*mIncrementalCompileOperation->getToCompiledMutex());
+            osgUtil::IncrementalCompileOperation::CompileSets& sets = mIncrementalCompileOperation->getToCompile();
+            for(osgUtil::IncrementalCompileOperation::CompileSets::iterator it = sets.begin(); it != sets.end();)
+            {
+                int refcount = (*it)->_subgraphToCompile->referenceCount();
+                if ((*it)->_subgraphToCompile->asDrawable()) refcount -= 1; // ref by CompileList.
+                if (refcount <= 2) // ref by ObjectCache + ref by _subgraphToCompile.
+                {
+                    // no other ref = not needed anymore.
+                    it = sets.erase(it);
+                }
+                else
+                    ++it;
+            }
+        }
     }
 
     void SceneManager::clearCache()
     {
         ResourceManager::clearCache();
 
-        OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mSharedStateMutex);
+        std::lock_guard<std::mutex> lock(mSharedStateMutex);
         mSharedStateManager->clearCache();
         mInstanceCache->clear();
     }
@@ -728,12 +753,12 @@ namespace Resource
     {
         if (mIncrementalCompileOperation)
         {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(*mIncrementalCompileOperation->getToCompiledMutex());
+            std::lock_guard<OpenThreads::Mutex> lock(*mIncrementalCompileOperation->getToCompiledMutex());
             stats->setAttribute(frameNumber, "Compiling", mIncrementalCompileOperation->getToCompile().size());
         }
 
         {
-            OpenThreads::ScopedLock<OpenThreads::Mutex> lock(mSharedStateMutex);
+            std::lock_guard<std::mutex> lock(mSharedStateMutex);
             stats->setAttribute(frameNumber, "Texture", mSharedStateManager->getNumSharedTextures());
             stats->setAttribute(frameNumber, "StateSet", mSharedStateManager->getNumSharedStateSets());
         }
@@ -742,15 +767,16 @@ namespace Resource
         stats->setAttribute(frameNumber, "Node Instance", mInstanceCache->getCacheSize());
     }
 
-    Shader::ShaderVisitor *SceneManager::createShaderVisitor()
+    Shader::ShaderVisitor *SceneManager::createShaderVisitor(const std::string& shaderPrefix)
     {
-        Shader::ShaderVisitor* shaderVisitor = new Shader::ShaderVisitor(*mShaderManager.get(), *mImageManager, "objects_vertex.glsl", "objects_fragment.glsl");
+        Shader::ShaderVisitor* shaderVisitor = new Shader::ShaderVisitor(*mShaderManager.get(), *mImageManager, shaderPrefix+"_vertex.glsl", shaderPrefix+"_fragment.glsl");
         shaderVisitor->setForceShaders(mForceShaders);
         shaderVisitor->setAutoUseNormalMaps(mAutoUseNormalMaps);
         shaderVisitor->setNormalMapPattern(mNormalMapPattern);
         shaderVisitor->setNormalHeightMapPattern(mNormalHeightMapPattern);
         shaderVisitor->setAutoUseSpecularMaps(mAutoUseSpecularMaps);
         shaderVisitor->setSpecularMapPattern(mSpecularMapPattern);
+        shaderVisitor->setApplyLightingToEnvMaps(mApplyLightingToEnvMaps);
         return shaderVisitor;
     }
 

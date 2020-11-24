@@ -41,6 +41,7 @@ namespace ESM
     struct CellState;
     struct FogState;
     struct CellId;
+    struct RefNum;
 }
 
 namespace MWWorld
@@ -242,6 +243,11 @@ namespace MWWorld
             Ptr searchViaActorId (int id);
             ///< Will return an empty Ptr if cell is not loaded.
 
+            Ptr searchViaRefNum (const ESM::RefNum& refNum);
+            ///< Will return an empty Ptr if cell is not loaded. Does not check references in
+            /// containers.
+            /// @note Triggers CellStore hasState flag.
+
             float getWaterLevel() const;
 
             bool movedHere(const MWWorld::Ptr& ptr) const;
@@ -382,6 +388,7 @@ namespace MWWorld
             public:
                 ///@note must return nullptr if the cell is not found
                 virtual CellStore* getCellStore(const ESM::CellId& cellId) = 0;
+                virtual ~GetCellStoreCallback() = default;
             };
 
             /// @param callback to use for retrieving of additional CellStore objects by ID (required for resolving moved references)

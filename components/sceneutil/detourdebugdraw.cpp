@@ -7,9 +7,6 @@
 #include <osg/Group>
 #include <osg/LineWidth>
 
-#define OPENMW_TO_STRING(X) #X
-#define OPENMW_LINE_STRING OPENMW_TO_STRING(__LINE__)
-
 namespace
 {
     using DetourNavigator::operator<<;
@@ -50,10 +47,8 @@ namespace SceneUtil
         mDepthMask = state;
     }
 
-    void DebugDraw::texture(bool state)
+    void DebugDraw::texture(bool)
     {
-        if (state)
-            throw std::logic_error("DebugDraw does not support textures (at " __FILE__ ":" OPENMW_LINE_STRING ")");
     }
 
     void DebugDraw::begin(osg::PrimitiveSet::Mode mode, float size)
@@ -85,9 +80,10 @@ namespace SceneUtil
         vertex(pos[0], pos[1], pos[2], color, uv[0], uv[1]);
     }
 
-    void DebugDraw::vertex(const float, const float, const float, unsigned, const float, const float)
+    void DebugDraw::vertex(const float x, const float y, const float z, unsigned color, const float, const float)
     {
-        throw std::logic_error("Not implemented (at " __FILE__ ":" OPENMW_LINE_STRING ")");
+        addVertex(osg::Vec3f(x, y, z));
+        addColor(SceneUtil::colourFromRGBA(color));
     }
 
     void DebugDraw::end()
@@ -122,6 +118,3 @@ namespace SceneUtil
         mColors->push_back(value);
     }
 }
-
-#undef OPENMW_TO_STRING
-#undef OPENMW_LINE_STRING

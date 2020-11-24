@@ -143,8 +143,14 @@ static void gdb_info(pid_t pid)
     FILE *f;
     int fd;
 
-    /* Create a temp file to put gdb commands into */
+    /*
+     * Create a temp file to put gdb commands into.
+     * Note: POSIX.1-2008 declares that the file should be already created with mode 0600 by default.
+     * Modern systems implement it and and suggest to do not touch masks in multithreaded applications.
+     * So CoverityScan warning is valid only for ancient versions of stdlib.
+    */
     strcpy(respfile, "/tmp/gdb-respfile-XXXXXX");
+    // coverity[secure_temp]
     if((fd=mkstemp(respfile)) >= 0 && (f=fdopen(fd, "w")) != nullptr)
     {
         fprintf(f, "attach %d\n"
@@ -412,7 +418,7 @@ static void crash_handler(const char *logfile)
 
     if(logfile)
     {
-        std::string message = "OpenMW has encountered a fatal error.\nCrash log saved to '" + std::string(logfile) + "'.\n Please report this to https://bugs.openmw.org !";
+        std::string message = "OpenMW has encountered a fatal error.\nCrash log saved to '" + std::string(logfile) + "'.\n Please report this to https://gitlab.com/OpenMW/openmw/issues !";
         SDL_ShowSimpleMessageBox(0, "Fatal Error", message.c_str(), nullptr);
     }
 
@@ -555,6 +561,9 @@ static bool is_debugger_present()
 
 void crashCatcherInstall(int argc, char **argv, const std::string &crashLogPath)
 {
+    if (const auto env = std::getenv("OPENMW_DISABLE_CRASH_CATCHER"))
+        if (std::atol(env) != 0)
+            return;
     if ((argc == 2 && strcmp(argv[1], crash_switch) == 0) || !is_debugger_present())
     {
         int s[5] = { SIGSEGV, SIGILL, SIGFPE, SIGBUS, SIGABRT };

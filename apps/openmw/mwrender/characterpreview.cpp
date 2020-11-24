@@ -17,7 +17,6 @@
 #include <components/fallback/fallback.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/shadow.hpp>
-#include <components/sceneutil/vismask.hpp>
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
@@ -28,6 +27,7 @@
 #include "../mwmechanics/weapontype.hpp"
 
 #include "npcanimation.hpp"
+#include "vismask.hpp"
 
 namespace MWRender
 {
@@ -41,7 +41,7 @@ namespace MWRender
         {
         }
 
-        virtual void operator () (osg::Node* node, osg::NodeVisitor* nv)
+        void operator () (osg::Node* node, osg::NodeVisitor* nv) override
         {
             if (!mRendered)
             {
@@ -61,7 +61,7 @@ namespace MWRender
             }
             else
             {
-                node->setNodeMask(SceneUtil::Mask_Disabled);
+                node->setNodeMask(0);
             }
         }
 
@@ -89,7 +89,7 @@ namespace MWRender
         {
         }
 
-        virtual void apply(osg::Node& node)
+        void apply(osg::Node& node) override
         {
             if (osg::StateSet* stateset = node.getStateSet())
             {
@@ -138,9 +138,9 @@ namespace MWRender
         mCamera->attach(osg::Camera::COLOR_BUFFER, mTexture);
         mCamera->setName("CharacterPreview");
         mCamera->setComputeNearFarMode(osg::Camera::COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES);
-        mCamera->setCullMask(~(SceneUtil::Mask_UpdateVisitor));
+        mCamera->setCullMask(~(Mask_UpdateVisitor));
 
-        mCamera->setNodeMask(SceneUtil::Mask_RenderToTexture);
+        mCamera->setNodeMask(Mask_RenderToTexture);
 
         osg::ref_ptr<SceneUtil::LightManager> lightManager = new SceneUtil::LightManager;
         lightManager->setStartLight(1);
@@ -255,7 +255,7 @@ namespace MWRender
 
     void CharacterPreview::redraw()
     {
-        mCamera->setNodeMask(SceneUtil::Mask_RenderToTexture);
+        mCamera->setNodeMask(Mask_RenderToTexture);
         mDrawOnceCallback->redrawNextFrame();
     }
 
@@ -364,7 +364,7 @@ namespace MWRender
         visitor.setTraversalNumber(mDrawOnceCallback->getLastRenderedFrame());
 
         osg::Node::NodeMask nodeMask = mCamera->getNodeMask();
-        mCamera->setNodeMask(SceneUtil::Mask_Default);
+        mCamera->setNodeMask(~0);
         mCamera->accept(visitor);
         mCamera->setNodeMask(nodeMask);
 
@@ -432,7 +432,7 @@ namespace MWRender
         {
         }
 
-        virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
+        void operator()(osg::Node* node, osg::NodeVisitor* nv) override
         {
             osg::Camera* cam = static_cast<osg::Camera*>(node);
 

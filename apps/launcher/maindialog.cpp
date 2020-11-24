@@ -1,6 +1,7 @@
 #include "maindialog.hpp"
 
 #include <components/version/version.hpp>
+#include <components/misc/helpviewer.hpp>
 
 #include <QDate>
 #include <QMessageBox>
@@ -54,12 +55,15 @@ Launcher::MainDialog::MainDialog(QWidget *parent)
     iconWidget->setCurrentRow(0);
     iconWidget->setFlow(QListView::LeftToRight);
 
+    QPushButton *helpButton = new QPushButton(tr("Help"));
     QPushButton *playButton = new QPushButton(tr("Play"));
     buttonBox->button(QDialogButtonBox::Close)->setText(tr("Close"));
+    buttonBox->addButton(helpButton, QDialogButtonBox::HelpRole);
     buttonBox->addButton(playButton, QDialogButtonBox::AcceptRole);
 
     connect(buttonBox, SIGNAL(rejected()), this, SLOT(close()));
     connect(buttonBox, SIGNAL(accepted()), this, SLOT(play()));
+    connect(buttonBox, SIGNAL(helpRequested()), this, SLOT(help()));
 
     // Remove what's this? button
     setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -207,10 +211,10 @@ void Launcher::MainDialog::setVersionLabel()
         versionLabel->setText(tr("OpenMW development (%1)").arg(revision.left(10)));
 
     // Add the compile date and time
-    versionLabel->setToolTip(tr("Compiled on %1 %2").arg(QLocale(QLocale::C).toDate(QString(__DATE__).simplified(),
-                                                                                    QLatin1String("MMM d yyyy")).toString(Qt::SystemLocaleLongDate),
-                                                         QLocale(QLocale::C).toTime(QString(__TIME__).simplified(),
-                                                                                    QLatin1String("hh:mm:ss")).toString(Qt::SystemLocaleShortDate)));
+    auto compileDate = QLocale(QLocale::C).toDate(QString(__DATE__).simplified(), QLatin1String("MMM d yyyy"));
+    auto compileTime = QLocale(QLocale::C).toTime(QString(__TIME__).simplified(), QLatin1String("hh:mm:ss"));
+    versionLabel->setToolTip(tr("Compiled on %1 %2").arg(QLocale::system().toString(compileDate, QLocale::LongFormat),
+                                                         QLocale::system().toString(compileTime, QLocale::ShortFormat)));
 }
 
 bool Launcher::MainDialog::setup()
@@ -399,7 +403,7 @@ bool Launcher::MainDialog::setupGameData()
         QAbstractButton *skipButton =
                 msgBox.addButton(tr("Skip"), QMessageBox::RejectRole);
 
-        Q_UNUSED(skipButton); // Supress compiler unused warning
+        Q_UNUSED(skipButton); // Suppress compiler unused warning
 
         msgBox.exec();
 
@@ -613,4 +617,9 @@ void Launcher::MainDialog::play()
 
     if (mGameInvoker->startProcess(QLatin1String("openmw"), true))
         return qApp->quit();
+}
+
+void Launcher::MainDialog::help()
+{
+    Misc::HelpViewer::openHelp("reference/index.html");
 }

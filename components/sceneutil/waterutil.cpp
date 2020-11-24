@@ -7,6 +7,12 @@
 
 namespace SceneUtil
 {
+    // disable nonsense test against a worldsize bb what will always pass
+    class WaterBoundCallback : public osg::Drawable::ComputeBoundingBoxCallback
+    {
+         osg::BoundingBox computeBound(const osg::Drawable&) const override { return osg::BoundingBox(); }
+    };
+
     osg::ref_ptr<osg::Geometry> createWaterGeometry(float size, int segments, float textureRepeats)
     {
         osg::ref_ptr<osg::Vec3Array> verts (new osg::Vec3Array);
@@ -51,6 +57,8 @@ namespace SceneUtil
         waterGeom->setNormalArray(normal, osg::Array::BIND_OVERALL);
 
         waterGeom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::QUADS,0,verts->size()));
+        waterGeom->setComputeBoundingBoxCallback(new WaterBoundCallback);
+        waterGeom->setCullingActive(false);
         return waterGeom;
     }
 
@@ -73,6 +81,9 @@ namespace SceneUtil
         stateset->setAttributeAndModes(depth, osg::StateAttribute::ON);
 
         stateset->setRenderBinDetails(renderBin, "RenderBin");
+
+        // Let the shader know we're dealing with simple water here.
+        stateset->addUniform(new osg::Uniform("simpleWater", true));
 
         return stateset;
     }

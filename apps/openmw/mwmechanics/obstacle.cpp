@@ -36,17 +36,13 @@ namespace MWMechanics
 
         // Check all the doors in this cell
         const MWWorld::CellRefList<ESM::Door>& doors = cell->getReadOnlyDoors();
-        const MWWorld::CellRefList<ESM::Door>::List& refList = doors.mList;
-        MWWorld::CellRefList<ESM::Door>::List::const_iterator it = refList.begin();
         osg::Vec3f pos(actor.getRefData().getPosition().asVec3());
         pos.z() = 0;
 
         osg::Vec3f actorDir = (actor.getRefData().getBaseNode()->getAttitude() * osg::Vec3f(0,1,0));
 
-        for (; it != refList.end(); ++it)
+        for (const auto& ref : doors.mList)
         {
-            const MWWorld::LiveCellRef<ESM::Door>& ref = *it;
-
             osg::Vec3f doorPos(ref.mData.getPosition().asVec3());
 
             // FIXME: cast
@@ -120,19 +116,21 @@ namespace MWMechanics
             mWalkState = WalkState::Norm;
             mStateDuration = 0;
             mPrev = position;
+            mInitialDistance = (destination - position).length();
             return;
         }
 
         if (mWalkState != WalkState::Evade)
         {
-            const float distSameSpot = DIST_SAME_SPOT * actor.getClass().getSpeed(actor) * duration;
+            const float distSameSpot = DIST_SAME_SPOT * actor.getClass().getCurrentSpeed(actor) * duration;
             const float prevDistance = (destination - mPrev).length();
             const float currentDistance = (destination - position).length();
             const float movedDistance = prevDistance - currentDistance;
+            const float movedFromInitialDistance = mInitialDistance - currentDistance;
 
             mPrev = position;
 
-            if (movedDistance >= distSameSpot)
+            if (movedDistance >= distSameSpot && movedFromInitialDistance >= distSameSpot)
             {
                 mWalkState = WalkState::Norm;
                 mStateDuration = 0;
@@ -143,6 +141,7 @@ namespace MWMechanics
             {
                 mWalkState = WalkState::CheckStuck;
                 mStateDuration = duration;
+                mInitialDistance = (destination - position).length();
                 return;
             }
 

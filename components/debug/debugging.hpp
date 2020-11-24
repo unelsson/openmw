@@ -38,6 +38,8 @@ namespace Debug
 
         virtual std::streamsize write(const char *str, std::streamsize size);
 
+        virtual ~DebugOutputBase() = default;
+
     protected:
         static Level getLevelMarker(const char *str);
 
@@ -87,7 +89,7 @@ namespace Debug
             mColors[NoLevel] = Reset;
         }
 
-        virtual std::streamsize writeImpl(const char *str, std::streamsize size, Level debugLevel)
+        std::streamsize writeImpl(const char *str, std::streamsize size, Level debugLevel) override
         {
             out.write (str, size);
             out.flush();

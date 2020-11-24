@@ -45,6 +45,8 @@ namespace ICS
 	{
 	public:
 		virtual void logMessage(const char* text) = 0;
+
+		virtual ~InputControlSystemLog() = default;
 	};
 
     class DllExport InputControlSystem
@@ -76,6 +78,8 @@ namespace ICS
 
 		void setDetectingBindingListener(DetectingBindingListener* detectingBindingListener){ mDetectingBindingListener = detectingBindingListener; };
 		DetectingBindingListener* getDetectingBindingListener(){ return mDetectingBindingListener; };
+
+		void setJoystickDeadZone(float deadZone){ mDeadZone = deadZone; };
 
 		// in seconds
 		void update(float timeSinceLastFrame);
@@ -178,6 +182,8 @@ namespace ICS
 
 		std::string mFileName;
 
+		float mDeadZone;
+
         typedef std::map<SDL_Scancode, ControlKeyBinderItem> ControlsKeyBinderMapType;	// <Scancode, [direction, control]>
 		typedef std::map<int, ControlAxisBinderItem> ControlsAxisBinderMapType;			// <axis, [direction, control]>
 		typedef std::map<int, ControlButtonBinderItem> ControlsButtonBinderMapType;		// <button, [direction, control]>
@@ -261,6 +267,8 @@ namespace ICS
 		virtual void mouseWheelBindingDetected(InputControlSystem* ICS, Control* control,
 		                                       InputControlSystem::MouseWheelClick click,
 		                                       Control::ControlChangingDirection direction);
+
+        virtual ~DetectingBindingListener() = default;
 
 		/* OPENMW CODE ENDS HERE
 		 * ------------------------------------------------------------------------------------- */

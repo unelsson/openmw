@@ -2,8 +2,10 @@
 #define GAME_MWMECHANICS_AISEQUENCE_H
 
 #include <list>
+#include <memory>
 
 #include "aistate.hpp"
+#include "aipackagetypeid.hpp"
 
 #include <components/esm/loadnpc.hpp>
 
@@ -36,7 +38,7 @@ namespace MWMechanics
     class AiSequence
     {
             ///AiPackages to run though
-            std::list<AiPackage *> mPackages;
+            std::list<std::unique_ptr<AiPackage>> mPackages;
 
             ///Finished with top AIPackage, set for one frame
             bool mDone;
@@ -48,7 +50,7 @@ namespace MWMechanics
             void copy (const AiSequence& sequence);
 
             /// The type of AI package that ran last
-            int mLastAiPackage;
+            AiPackageTypeId mLastAiPackage;
             AiState mAiState;
 
         public:
@@ -64,20 +66,20 @@ namespace MWMechanics
             virtual ~AiSequence();
 
             /// Iterator may be invalidated by any function calls other than begin() or end().
-            std::list<AiPackage*>::const_iterator begin() const;
-            std::list<AiPackage*>::const_iterator end() const;
+            std::list<std::unique_ptr<AiPackage>>::const_iterator begin() const;
+            std::list<std::unique_ptr<AiPackage>>::const_iterator end() const;
 
-            void erase (std::list<AiPackage*>::const_iterator package);
+            void erase(std::list<std::unique_ptr<AiPackage>>::const_iterator package);
 
             /// Returns currently executing AiPackage type
-            /** \see enum AiPackage::TypeId **/
-            int getTypeId() const;
+            /** \see enum class AiPackageTypeId **/
+            AiPackageTypeId getTypeId() const;
 
             /// Get the typeid of the Ai package that ran last
             /** NOT the currently "active" Ai package that will be run in the next frame.
                 This difference is important when an Ai package has just finished and been removed.
-                \see enum AiPackage::TypeId **/
-            int getLastRunTypeId() const { return mLastAiPackage; }
+                \see enum class AiPackageTypeId **/
+            AiPackageTypeId getLastRunTypeId() const { return mLastAiPackage; }
 
             /// Return true and assign target if combat package is currently active, return false otherwise
             bool getCombatTarget (MWWorld::Ptr &targetActor) const;
@@ -92,7 +94,7 @@ namespace MWMechanics
             bool isEngagedWithActor () const;
 
             /// Does this AI sequence have the given package type?
-            bool hasPackage(int typeId) const;
+            bool hasPackage(AiPackageTypeId typeId) const;
 
             /// Are we in combat with this particular actor?
             bool isInCombat (const MWWorld::Ptr& actor) const;
@@ -125,7 +127,7 @@ namespace MWMechanics
 
             /// Return the current active package.
             /** If there is no active package, it will throw an exception **/
-            AiPackage* getActivePackage();
+            const AiPackage& getActivePackage();
 
             /// Fills the AiSequence with packages
             /** Typically used for loading from the ESM

@@ -4,10 +4,10 @@
 
 namespace DetourNavigator
 {
-    boost::optional<Settings> makeSettingsFromSettingsManager()
+    std::optional<Settings> makeSettingsFromSettingsManager()
     {
         if (!::Settings::Manager::getBool("enable", "Navigator"))
-            return boost::optional<Settings>();
+            return std::optional<Settings>();
 
         Settings navigatorSettings;
 
@@ -40,6 +40,7 @@ namespace DetourNavigator
         navigatorSettings.mNavMeshPathPrefix = ::Settings::Manager::getString("nav mesh path prefix", "Navigator");
         navigatorSettings.mEnableRecastMeshFileNameRevision = ::Settings::Manager::getBool("enable recast mesh file name revision", "Navigator");
         navigatorSettings.mEnableNavMeshFileNameRevision = ::Settings::Manager::getBool("enable nav mesh file name revision", "Navigator");
+        navigatorSettings.mMinUpdateInterval = std::chrono::milliseconds(::Settings::Manager::getInt("min update interval ms", "Navigator"));
 
         return navigatorSettings;
     }

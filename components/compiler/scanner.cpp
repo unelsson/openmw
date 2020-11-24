@@ -1,7 +1,6 @@
 #include "scanner.hpp"
 
 #include <cassert>
-#include <iterator>
 
 #include "exception.hpp"
 #include "errorhandler.hpp"
@@ -266,13 +265,7 @@ namespace Compiler
         "messagebox",
         "set", "to",
         "getsquareroot",
-        "menumode",
-        "random",
-        "startscript", "stopscript", "scriptrunning",
-        "getdistance",
-        "getsecondspassed",
-        "enable", "disable", "getdisabled",
-        0
+        nullptr
     };
 
     bool Scanner::scanName (MultiChar& c, Parser& parser, bool& cont)
@@ -282,6 +275,8 @@ namespace Compiler
 
         if (!scanName (name))
             return false;
+        else if(name.empty())
+            return true;
 
         TokenLoc loc (mLoc);
         mLoc.mLiteral.clear();
@@ -368,6 +363,26 @@ namespace Compiler
                         mErrorHandler.warning ("string contains newline character, make sure that it is intended", mLoc);
                     else
                     {
+                        bool allWhitespace = true;
+                        for (size_t i = 1; i < name.size(); i++)
+                        {
+                            //ignore comments
+                            if (name[i] == ';')
+                                break;
+                            else if (name[i] != '\t' && name[i] != ' ' && name[i] != '\r')
+                            {
+                                allWhitespace = false;
+                                break;
+                            }
+                        }
+                        if (allWhitespace)
+                        {
+                            name.clear();
+                            mLoc.mLiteral.clear();
+                            mErrorHandler.warning ("unterminated empty string", mLoc);
+                            return true;
+                        }
+
                         error = true;
                         mErrorHandler.error ("incomplete string or name", mLoc);
                         break;
@@ -622,7 +637,7 @@ namespace Compiler
     void Scanner::listKeywords (std::vector<std::string>& keywords)
     {
         for (int i=0; Compiler::sKeywords[i]; ++i)
-            keywords.push_back (Compiler::sKeywords[i]);
+            keywords.emplace_back(Compiler::sKeywords[i]);
 
         if (mExtensions)
             mExtensions->listKeywords (keywords);

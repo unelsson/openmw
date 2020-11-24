@@ -26,15 +26,14 @@
 #include "../widget/scenetooltoggle2.hpp"
 #include "../widget/scenetoolrun.hpp"
 
-#include <components/sceneutil/vismask.hpp>
-
 #include "object.hpp"
+#include "mask.hpp"
 #include "instancemode.hpp"
 #include "pathgridmode.hpp"
 #include "cameracontroller.hpp"
 
 CSVRender::WorldspaceWidget::WorldspaceWidget (CSMDoc::Document& document, QWidget* parent)
-    : SceneWidget (document.getData().getResourceSystem(), parent, 0, false)
+    : SceneWidget (document.getData().getResourceSystem(), parent, Qt::WindowFlags(), false)
     , mSceneElements(0)
     , mRun(0)
     , mDocument(document)
@@ -139,7 +138,7 @@ void CSVRender::WorldspaceWidget::settingChanged (const CSMPrefs::Setting *setti
     {
         float alpha = setting->toDouble();
         // getSelection is virtual, thus this can not be called from the constructor
-        auto selection = getSelection(SceneUtil::Mask_EditorReference);
+        auto selection = getSelection(Mask_Reference);
         for (osg::ref_ptr<TagBase> tag : selection)
         {
             if (auto objTag = dynamic_cast<ObjectTag*>(tag.get()))
@@ -256,8 +255,7 @@ CSVWidget::SceneToolRun *CSVRender::WorldspaceWidget::makeRunTool (
         bool default_ = debugProfiles.data (debugProfiles.index (i, defaultColumn)).toInt();
 
         if (state!=CSMWorld::RecordBase::State_Deleted && default_)
-            profiles.push_back (
-                debugProfiles.data (debugProfiles.index (i, idColumn)).
+            profiles.emplace_back(debugProfiles.data (debugProfiles.index (i, idColumn)).
                 toString().toUtf8().constData());
     }
 
@@ -346,7 +344,7 @@ unsigned int CSVRender::WorldspaceWidget::getVisibilityMask() const
 
 void CSVRender::WorldspaceWidget::setInteractionMask (unsigned int mask)
 {
-    mInteractionMask = mask | SceneUtil::Mask_EditorCellMarker | SceneUtil::Mask_EditorCellArrow;
+    mInteractionMask = mask | Mask_CellMarker | Mask_CellArrow;
 }
 
 unsigned int CSVRender::WorldspaceWidget::getInteractionMask() const
@@ -362,15 +360,15 @@ void CSVRender::WorldspaceWidget::setEditLock (bool locked)
 void CSVRender::WorldspaceWidget::addVisibilitySelectorButtons (
     CSVWidget::SceneToolToggle2 *tool)
 {
-    tool->addButton (Button_Reference, SceneUtil::Mask_EditorReference, "Instances");
-    tool->addButton (Button_Water, SceneUtil::Mask_Water, "Water");
-    tool->addButton (Button_Pathgrid, SceneUtil::Mask_Pathgrid, "Pathgrid");
+    tool->addButton (Button_Reference, Mask_Reference, "Instances");
+    tool->addButton (Button_Water, Mask_Water, "Water");
+    tool->addButton (Button_Pathgrid, Mask_Pathgrid, "Pathgrid");
 }
 
 void CSVRender::WorldspaceWidget::addEditModeSelectorButtons (CSVWidget::SceneToolMode *tool)
 {
     /// \todo replace EditMode with suitable subclasses
-    tool->addButton (new InstanceMode (this, tool), "object");
+    tool->addButton (new InstanceMode (this, mRootNode, tool), "object");
     tool->addButton (new PathgridMode (this, tool), "pathgrid");
 }
 
@@ -613,6 +611,8 @@ void CSVRender::WorldspaceWidget::updateOverlay()
 
 void CSVRender::WorldspaceWidget::mouseMoveEvent (QMouseEvent *event)
 {
+    dynamic_cast<CSVRender::EditMode&> (*mEditMode->getCurrent()).mouseMoveEvent (event);
+
     if (mDragging)
     {
         int diffX = event->x() - mDragX;
@@ -645,13 +645,8 @@ void CSVRender::WorldspaceWidget::mouseMoveEvent (QMouseEvent *event)
 
         if (mDragging)
         {
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
             mDragX = event->localPos().x();
             mDragY = height() - event->localPos().y();
-#else
-            mDragX = event->posF().x();
-            mDragY = height() - event->posF().y();
-#endif
         }
     }
     else
@@ -681,8 +676,7 @@ void CSVRender::WorldspaceWidget::wheelEvent (QWheelEvent *event)
             factor *= mDragShiftFactor;
 
         EditMode& editMode = dynamic_cast<CSVRender::EditMode&> (*mEditMode->getCurrent());
-
-        editMode.dragWheel (event->delta(), factor);
+        editMode.dragWheel (event->angleDelta().y(), factor);
     }
     else
         SceneWidget::wheelEvent(event);

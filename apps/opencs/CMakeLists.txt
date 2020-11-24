@@ -89,12 +89,16 @@ opencs_units (view/render
     scenewidget worldspacewidget pagedworldspacewidget unpagedworldspacewidget
     previewwidget editmode instancemode instanceselectionmode instancemovemode
     orbitcameramode pathgridmode selectionmode pathgridselectionmode cameracontroller
-    cellwater terraintexturemode actor terrainselection terrainshapemode
+    cellwater terraintexturemode actor terrainselection terrainshapemode brushdraw
     )
 
 opencs_units_noqt (view/render
     lighting lightingday lightingnight lightingbright object cell terrainstorage tagbase
     cellarrow cellmarker cellborder pathgrid
+    )
+
+opencs_hdrs_noqt (view/render
+    mask
     )
 
 
@@ -145,16 +149,9 @@ if(WIN32)
     set(QT_USE_QTMAIN TRUE)
 endif(WIN32)
 
-if (DESIRED_QT_VERSION MATCHES 4)
-    include(${QT_USE_FILE})
-    qt4_wrap_ui(OPENCS_UI_HDR ${OPENCS_UI})
-    qt4_wrap_cpp(OPENCS_MOC_SRC ${OPENCS_HDR_QT})
-    qt4_add_resources(OPENCS_RES_SRC ${OPENCS_RES})
-else()
-    qt5_wrap_ui(OPENCS_UI_HDR ${OPENCS_UI})
-    qt5_wrap_cpp(OPENCS_MOC_SRC ${OPENCS_HDR_QT})
-    qt5_add_resources(OPENCS_RES_SRC ${OPENCS_RES})
-endif()
+qt5_wrap_ui(OPENCS_UI_HDR ${OPENCS_UI})
+qt5_wrap_cpp(OPENCS_MOC_SRC ${OPENCS_HDR_QT})
+qt5_add_resources(OPENCS_RES_SRC ${OPENCS_RES})
 
 # for compiled .ui files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -219,7 +216,6 @@ endif(APPLE)
 
 target_link_libraries(openmw-cs
     ${OSG_LIBRARIES}
-    ${OPENTHREADS_LIBRARIES}
     ${OSGTEXT_LIBRARIES}
     ${OSGUTIL_LIBRARIES}
     ${OSGVIEWER_LIBRARIES}
@@ -232,25 +228,20 @@ target_link_libraries(openmw-cs
     components
 )
 
-if (DESIRED_QT_VERSION MATCHES 4)
-    target_link_libraries(openmw-cs
-    ${QT_QTGUI_LIBRARY}
-    ${QT_QTCORE_LIBRARY}
-    ${QT_QTNETWORK_LIBRARY}
-    ${QT_QTOPENGL_LIBRARY})
-
-    if (WIN32)
-        target_link_libraries(openmw-cs ${QT_QTMAIN_LIBRARY})
-    endif()
-else()
-    target_link_libraries(openmw-cs Qt5::Widgets Qt5::Core Qt5::Network Qt5::OpenGL)
-endif()
+target_link_libraries(openmw-cs Qt5::Widgets Qt5::Core Qt5::Network Qt5::OpenGL)
 
 if (WIN32)
     target_link_libraries(openmw-cs ${Boost_LOCALE_LIBRARY})
     INSTALL(TARGETS openmw-cs RUNTIME DESTINATION ".")
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/Debug/openmw-cs.cfg" DESTINATION "." CONFIGURATIONS Debug)
-    INSTALL(FILES "${OpenMW_BINARY_DIR}/Release/openmw-cs.cfg" DESTINATION "." CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel)
+
+    get_generator_is_multi_config(multi_config)
+    if (multi_config)
+        SET(INSTALL_SOURCE "${OpenMW_BINARY_DIR}/$<CONFIG>")
+    else ()
+        SET(INSTALL_SOURCE "${OpenMW_BINARY_DIR}")
+    endif ()
+
+    INSTALL(FILES "${INSTALL_SOURCE}/openmw-cs.cfg" DESTINATION ".")
 endif()
 
 if (MSVC)

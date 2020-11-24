@@ -1,7 +1,7 @@
 #ifndef GAME_MWMECHANICS_AICOMBAT_H
 #define GAME_MWMECHANICS_AICOMBAT_H
 
-#include "aipackage.hpp"
+#include "typedaipackage.hpp"
 
 #include "../mwworld/cellstore.hpp" // for Doors
 
@@ -91,32 +91,34 @@ namespace MWMechanics
     };
 
     /// \brief Causes the actor to fight another actor
-    class AiCombat : public AiPackage
+    class AiCombat final : public TypedAiPackage<AiCombat>
     {
         public:
             ///Constructor
             /** \param actor Actor to fight **/
-            AiCombat(const MWWorld::Ptr& actor);
+            explicit AiCombat(const MWWorld::Ptr& actor);
 
-            AiCombat (const ESM::AiSequence::AiCombat* combat);
+            explicit AiCombat (const ESM::AiSequence::AiCombat* combat);
 
             void init();
 
-            virtual AiCombat *clone() const;
+            bool execute (const MWWorld::Ptr& actor, CharacterController& characterController, AiState& state, float duration) override;
 
-            virtual bool execute (const MWWorld::Ptr& actor, CharacterController& characterController, AiState& state, float duration);
+            static constexpr AiPackageTypeId getTypeId() { return AiPackageTypeId::Combat; }
 
-            virtual int getTypeId() const;
-
-            virtual unsigned int getPriority() const;
+            static constexpr Options makeDefaultOptions()
+            {
+                AiPackage::Options options;
+                options.mPriority = 1;
+                options.mCanCancel = false;
+                options.mShouldCancelPreviousAi = false;
+                return options;
+            }
 
             ///Returns target ID
-            MWWorld::Ptr getTarget() const;
+            MWWorld::Ptr getTarget() const override;
 
-            virtual void writeState(ESM::AiSequence::AiSequence &sequence) const;
-
-            virtual bool canCancel() const { return false; }
-            virtual bool shouldCancelPreviousAi() const { return false; }
+            void writeState(ESM::AiSequence::AiSequence &sequence) const override;
 
         private:
             /// Returns true if combat should end

@@ -10,6 +10,8 @@
 
 #include <components/esm/cellid.hpp>
 
+#include <osg/Timer>
+
 #include "../mwworld/ptr.hpp"
 #include "../mwworld/doorstate.hpp"
 
@@ -21,6 +23,7 @@ namespace osg
     class Matrixf;
     class Quat;
     class Image;
+    class Stats;
 }
 
 namespace Loading
@@ -35,6 +38,8 @@ namespace ESM
     struct Position;
     struct Cell;
     struct Class;
+    struct Container;
+    struct Creature;
     struct Potion;
     struct Spell;
     struct NPC;
@@ -46,6 +51,12 @@ namespace ESM
     struct EffectList;
     struct CreatureLevList;
     struct ItemLevList;
+    struct TimeStamp;
+}
+
+namespace MWPhysics
+{
+    class RayCastingInterface;
 }
 
 namespace MWRender
@@ -189,6 +200,8 @@ namespace MWBase
             virtual MWWorld::Ptr searchPtrViaActorId (int actorId) = 0;
             ///< Search is limited to the active cells.
 
+            virtual MWWorld::Ptr searchPtrViaRefNum (const std::string& id, const ESM::RefNum& refNum) = 0;
+
             virtual MWWorld::Ptr findContainer (const MWWorld::ConstPtr& ptr) = 0;
             ///< Return a pointer to a liveCellRef which contains \a ptr.
             /// \note Search is limited to the active cells.
@@ -200,24 +213,14 @@ namespace MWBase
             virtual void advanceTime (double hours, bool incremental = false) = 0;
             ///< Advance in-game time.
 
-            virtual void setHour (double hour) = 0;
-            ///< Set in-game time hour.
-
-            virtual void setMonth (int month) = 0;
-            ///< Set in-game time month.
-
-            virtual void setDay (int day) = 0;
-            ///< Set in-game time day.
-
-            virtual int getDay() const = 0;
-            virtual int getMonth() const = 0;
-            virtual int getYear() const = 0;
-
             virtual std::string getMonthName (int month = -1) const = 0;
             ///< Return name of month (-1: current month)
 
             virtual MWWorld::TimeStamp getTimeStamp() const = 0;
-            ///< Return current in-game time stamp.
+            ///< Return current in-game time and number of day since new game start.
+
+            virtual ESM::EpochTimeStamp getEpochTimeStamp() const = 0;
+            ///< Return current in-game date and time.
 
             virtual bool toggleSky() = 0;
             ///< \return Resulting mode
@@ -308,10 +311,14 @@ namespace MWBase
 
             virtual void updateAnimatedCollisionShape(const MWWorld::Ptr &ptr) = 0;
 
+            virtual const MWPhysics::RayCastingInterface* getRayCasting() const = 0;
+
             virtual bool castRay (float x1, float y1, float z1, float x2, float y2, float z2, int mask) = 0;
             ///< cast a Ray and return true if there is an object in the ray path.
 
             virtual bool castRay (float x1, float y1, float z1, float x2, float y2, float z2) = 0;
+
+            virtual bool castRay(const osg::Vec3f& from, const osg::Vec3f& to, int mask, const MWWorld::ConstPtr& ignore) = 0;
 
             virtual void setActorCollisionMode(const MWWorld::Ptr& ptr, bool internal, bool external) = 0;
             virtual bool isActorCollisionEnabled(const MWWorld::Ptr& ptr) = 0;
@@ -373,8 +380,20 @@ namespace MWBase
             ///< Write this record to the ESM store, allowing it to override a pre-existing record with the same ID.
             /// \return pointer to created record
 
+            virtual const ESM::Creature *createOverrideRecord (const ESM::Creature& record) = 0;
+            ///< Write this record to the ESM store, allowing it to override a pre-existing record with the same ID.
+            /// \return pointer to created record
+
+            virtual const ESM::NPC *createOverrideRecord (const ESM::NPC& record) = 0;
+            ///< Write this record to the ESM store, allowing it to override a pre-existing record with the same ID.
+            /// \return pointer to created record
+
+            virtual const ESM::Container *createOverrideRecord (const ESM::Container& record) = 0;
+            ///< Write this record to the ESM store, allowing it to override a pre-existing record with the same ID.
+            /// \return pointer to created record
+
             virtual void update (float duration, bool paused) = 0;
-            virtual void updatePhysics (float duration, bool paused) = 0;
+            virtual void updatePhysics (float duration, bool paused, osg::Timer_t frameStart, unsigned int frameNumber, osg::Stats& stats) = 0;
 
             virtual void updateWindowManager () = 0;
 
@@ -411,12 +430,14 @@ namespace MWBase
 
             virtual void togglePOV(bool force = false) = 0;
             virtual bool isFirstPerson() const = 0;
+            virtual bool isPreviewModeEnabled() const = 0;
             virtual void togglePreviewMode(bool enable) = 0;
             virtual bool toggleVanityMode(bool enable) = 0;
             virtual void allowVanityMode(bool allow) = 0;
-            virtual void changeVanityModeScale(float factor) = 0;
             virtual bool vanityRotateCamera(float * rot) = 0;
-            virtual void setCameraDistance(float dist, bool adjust = false, bool override = true)=0;
+            virtual void adjustCameraDistance(float dist) = 0;
+            virtual void applyDeferredPreviewRotationToPlayer(float dt) = 0;
+            virtual void disableDeferredPreviewRotation() = 0;
 
             virtual void setupPlayer() = 0;
             virtual void renderPlayer() = 0;
@@ -623,6 +644,12 @@ namespace MWBase
             virtual osg::Vec3f getPathfindingHalfExtents(const MWWorld::ConstPtr& actor) const = 0;
 
             virtual bool hasCollisionWithDoor(const MWWorld::ConstPtr& door, const osg::Vec3f& position, const osg::Vec3f& destination) const = 0;
+
+            virtual bool isAreaOccupiedByOtherActor(const osg::Vec3f& position, const float radius, const MWWorld::ConstPtr& ignore) const = 0;
+
+            virtual void reportStats(unsigned int frameNumber, osg::Stats& stats) const = 0;
+
+            virtual std::vector<MWWorld::Ptr> getAll(const std::string& id) = 0;
     };
 }
 

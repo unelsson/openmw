@@ -59,7 +59,7 @@ int runApplication(int argc, char *argv[])
     QDir dir(QCoreApplication::applicationDirPath());
     QDir::setCurrent(dir.absolutePath());
 #endif
-
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     application.setWindowIcon (QIcon (":./openmw-cs.png"));
 
     CS::Editor editor(argc, argv);

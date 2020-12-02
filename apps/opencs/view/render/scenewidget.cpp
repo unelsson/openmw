@@ -45,17 +45,9 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
 
     QSurfaceFormat format = QSurfaceFormat::defaultFormat();
 
-#ifdef OSG_GL3_AVAILABLE
-    format.setVersion(3, 2);
-    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setVersion(2, 1);
     format.setRenderableType(QSurfaceFormat::OpenGL);
-    format.setOption(QSurfaceFormat::DebugContext);
-#else
-    format.setVersion(2, 0);
-    format.setProfile(QSurfaceFormat::CompatibilityProfile);
-    format.setRenderableType(QSurfaceFormat::OpenGL);
-    format.setOption(QSurfaceFormat::DebugContext);
-#endif
+    //format.setOption(QSurfaceFormat::DebugContext);
     format.setDepthBufferSize(24);
     //format.setAlphaBufferSize(8);
     format.setSamples(ds->getMultiSamples());
@@ -89,6 +81,13 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
     //osg::ref_ptr<osgViewer::GraphicsWindowEmbedded> window = new osgViewer::GraphicsWindowEmbedded(traits);
     osg::ref_ptr<osgViewer::GraphicsWindowEmbedded> window = new osgViewer::GraphicsWindowEmbedded(0, 0, width(), height());
     mWidget->setGraphicsWindowEmbedded(window);
+
+    int frameRateLimit = CSMPrefs::get()["Rendering"]["framerate-limit"].toInt();
+    mRenderer->setRunMaxFrameRate(frameRateLimit);
+
+#if OSG_VERSION_GREATER_OR_EQUAL(3,5,5)
+    mRenderer->setUseConfigureAffinity(false);
+#endif
 
     /*
     // add the thread model handler

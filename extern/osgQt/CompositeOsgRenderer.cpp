@@ -18,9 +18,6 @@
 
 #include "osgQOpenGLWidget"
 
-//#include <osgQOpenGL/CullVisitorEx>
-//#include <osgQOpenGL/GraphicsWindowEx>
-
 #include <mutex>
 #include <osgViewer/View>
 //#include <osgViewer/CompositeViewer>
@@ -31,6 +28,7 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
+#include <QOpenGLWidget>
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -41,11 +39,13 @@
 CompositeOsgRenderer::CompositeOsgRenderer(QObject* parent)
     : QObject(parent), osgViewer::CompositeViewer(), mSimulationTime(0.0)
 {
+    _firstFrame = true;
 }
 
 CompositeOsgRenderer::CompositeOsgRenderer(osg::ArgumentParser* arguments, QObject* parent)
     : QObject(parent), osgViewer::CompositeViewer(*arguments), mSimulationTime(0.0)
 {
+    _firstFrame = true;
 }
 
 CompositeOsgRenderer::~CompositeOsgRenderer()
@@ -122,9 +122,6 @@ void CompositeOsgRenderer::setupOSG(int windowWidth, int windowHeight)
     connect( &mTimer, SIGNAL(timeout()), this, SLOT(update()) );
     mTimer.start( 10 );
 
-    /*int frameRateLimit = CSMPrefs::get()["Rendering"]["framerate-limit"].toInt();
-    setRunMaxFrameRate(frameRateLimit);*/
-
     osgViewer::CompositeViewer::Windows windows;
     getWindows(windows);
 
@@ -135,46 +132,12 @@ void CompositeOsgRenderer::setupOSG(int windowWidth, int windowHeight)
 // called from ViewerWidget paintGL() method
 void CompositeOsgRenderer::frame(double simulationTime)
 {
-    // limit the frame rate
-    if(getRunMaxFrameRate() > 0.0)
-    {
-        double dt = _lastFrameStartTime.time_s();
-        double minFrameTime = 1.0 / getRunMaxFrameRate();
-
-        if(dt < minFrameTime)
-            QThread::usleep(static_cast<unsigned int>(1000000.0 * (minFrameTime - dt)));
-    }
-
-    // avoid excessive CPU loading when no frame is required in ON_DEMAND mode
-    if(getRunFrameScheme() == osgViewer::ViewerBase::ON_DEMAND)
-    {
-        double dt = _lastFrameStartTime.time_s();
-
-        if(dt < 0.01)
-            std::this_thread::sleep_for(std::chrono::duration<double>(1000000.0 * (0.01 - dt)));
-    }
-
-    // record start frame time
-    _lastFrameStartTime.setStartTick();
-    // make frame
-
-#if 1
-    osgViewer::CompositeViewer::frame(simulationTime);
-#else
-
     if(_done) return;
-
-    // OSG_NOTICE<<std::endl<<"CompositeViewer::frame()"<<std::endl<<std::endl;
 
     if(_firstFrame)
     {
         viewerInit();
-
-        if(!isRealized())
-        {
-            realize();
-        }
-
+        realize();
         _firstFrame = false;
     }
 
@@ -182,6 +145,5 @@ void CompositeOsgRenderer::frame(double simulationTime)
 
     eventTraversal();
     updateTraversal();
-    //    renderingTraversals();
-#endif
+    renderingTraversals();
 }

@@ -55,7 +55,8 @@ public:
     QTimer mTimer;
 
 protected:
-
+  void timerEvent(QTimerEvent* event) override;
+  
 public slots:
     void update();
 

@@ -60,7 +60,6 @@ void CompositeOsgRenderer::update()
     emit simulationUpdated(dt);
 
     mSimulationTime += dt;
-    frame(mSimulationTime);
 
     double minFrameTime = _runMaxFrameRate > 0.0 ? 1.0 / _runMaxFrameRate : 0.0;
     if (dt < minFrameTime)
@@ -117,7 +116,7 @@ void CompositeOsgRenderer::setupOSG(int windowWidth, int windowHeight)
     setReleaseContextAtEndOfFrameHint(false);
     setThreadingModel(osgViewer::CompositeViewer::SingleThreaded);
 
-    setRunFrameScheme(osgViewer::ViewerBase::CONTINUOUS);
+    setRunFrameScheme(osgViewer::ViewerBase::ON_DEMAND);
 
     connect( &mTimer, SIGNAL(timeout()), this, SLOT(update()) );
     mTimer.start( 10 );
@@ -146,4 +145,19 @@ void CompositeOsgRenderer::frame(double simulationTime)
     eventTraversal();
     updateTraversal();
     renderingTraversals();
+}
+
+void CompositeOsgRenderer::timerEvent(QTimerEvent* /*event*/)
+{
+    if(_applicationAboutToQuit)
+        {
+            return;
+        }
+
+        // ask ViewerWidget to update 3D view
+        if(getRunFrameScheme() != osgViewer::ViewerBase::ON_DEMAND ||
+           checkNeedToDoFrame())
+        {
+            update();
+        }
 }

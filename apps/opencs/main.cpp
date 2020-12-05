@@ -53,13 +53,13 @@ int runApplication(int argc, char *argv[])
     qRegisterMetaType<CSMWorld::UniversalId> ("CSMWorld::UniversalId");
     qRegisterMetaType<CSMDoc::Message> ("CSMDoc::Message");
 
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     Application application (argc, argv);
 
 #ifdef Q_OS_MAC
     QDir dir(QCoreApplication::applicationDirPath());
     QDir::setCurrent(dir.absolutePath());
 #endif
-    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     application.setWindowIcon (QIcon (":./openmw-cs.png"));
 
     CS::Editor editor(argc, argv);

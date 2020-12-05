@@ -98,9 +98,7 @@ void osgQOpenGLWidget::createRenderer()
     setDefaultDisplaySettings();
 	if (!m_renderer) m_renderer = new CompositeOsgRenderer(this);
 
-    int width = 640;
-    int height = 480;
-    width = this->width();
-    height = this->height();
+    int width = this->width();
+    int height = this->height();
     m_renderer->setupOSG(width, height);
 }

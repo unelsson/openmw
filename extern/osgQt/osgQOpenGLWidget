@@ -36,7 +36,6 @@ class osgQOpenGLWidget : public QOpenGLWidget,
 
 protected:
     CompositeOsgRenderer* m_renderer {nullptr};
-    bool _osgWantsToRenderFrame{true};
     std::mutex _osgMutex;
     osg::ArgumentParser* _arguments {nullptr};
 	bool _isFirstFrame {true};

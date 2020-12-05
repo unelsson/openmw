@@ -27,13 +27,8 @@ class CompositeOsgRenderer : public QObject, public osgViewer::CompositeViewer
     bool                                       m_osgInitialized {false};
     osg::ref_ptr<osgViewer::GraphicsWindowEmbedded>    m_osgWinEmb;
 
-    int                                        _timerId{0};
-    osg::Timer                                 _lastFrameStartTime;
     osg::Timer                                 mFrameTimer;
-    bool                                       _applicationAboutToQuit {false};
-    bool                                       _osgWantsToRenderFrame{true};
     double                                     mSimulationTime;
-
     Q_OBJECT
 
 public:

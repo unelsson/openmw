@@ -60,18 +60,16 @@ void CompositeOsgRenderer::update()
     emit simulationUpdated(dt);
 
     mSimulationTime += dt;
+    osgQOpenGLWidget* osgWidget = dynamic_cast<osgQOpenGLWidget*>(parent());
+    if (osgWidget)
+    {
+        osgWidget->update();
+    }
 
     double minFrameTime = _runMaxFrameRate > 0.0 ? 1.0 / _runMaxFrameRate : 0.0;
     if (dt < minFrameTime)
     {
         std::this_thread::sleep_for(std::chrono::duration<double>(minFrameTime - dt));
-    }
-
-    osgQOpenGLWidget* osgWidget = dynamic_cast<osgQOpenGLWidget*>(parent());
-    if (osgWidget)
-    {
-        osgWidget->_osgWantsToRenderFrame = true;
-        osgWidget->update();
     }
 }
 
@@ -123,9 +121,6 @@ void CompositeOsgRenderer::setupOSG(int windowWidth, int windowHeight)
 
     osgViewer::CompositeViewer::Windows windows;
     getWindows(windows);
-
-    _timerId = startTimer(10, Qt::PreciseTimer);
-    _lastFrameStartTime.setStartTick(0);
 }
 
 // called from ViewerWidget paintGL() method
@@ -149,11 +144,6 @@ void CompositeOsgRenderer::frame(double simulationTime)
 
 void CompositeOsgRenderer::timerEvent(QTimerEvent* /*event*/)
 {
-    if(_applicationAboutToQuit)
-        {
-            return;
-        }
-
         // ask ViewerWidget to update 3D view
         if(getRunFrameScheme() != osgViewer::ViewerBase::ON_DEMAND ||
            checkNeedToDoFrame())

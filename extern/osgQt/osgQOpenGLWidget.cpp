@@ -2,18 +2,7 @@
 #include "CompositeOsgRenderer"
 
 #include <mutex>
-
 #include <osgViewer/View>
-#include <osgViewer/CompositeViewer>
-#include <osg/GL>
-
-#include <QApplication>
-#include <QKeyEvent>
-#include <QInputDialog>
-#include <QLayout>
-#include <QMainWindow>
-#include <QScreen>
-#include <QWindow>
 
 osgQOpenGLWidget::osgQOpenGLWidget(QWidget* parent)
     : QOpenGLWidget(parent)

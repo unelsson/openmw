@@ -70,8 +70,6 @@ namespace CSVRender
 
             void updateCameraParameters(double overrideAspect = -1.0);
 
-            QTimer mTimer;
-
         protected slots:
 
             void toggleRenderStats();

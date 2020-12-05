@@ -20,21 +20,8 @@
 
 #include <mutex>
 #include <osgViewer/View>
-//#include <osgViewer/CompositeViewer>
 
-#include <QApplication>
-#include <QScreen>
-#include <QOpenGLContext>
-#include <QOpenGLFunctions>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLVertexArrayObject>
-#include <QOpenGLWidget>
-
-#include <QKeyEvent>
-#include <QMouseEvent>
-#include <QWheelEvent>
-
-#include <QThread>
+#include <thread>
 
 CompositeOsgRenderer::CompositeOsgRenderer(QObject* parent)
     : QObject(parent), osgViewer::CompositeViewer(), mSimulationTime(0.0)

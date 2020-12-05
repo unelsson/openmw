@@ -47,30 +47,11 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
 
     format.setVersion(2, 1);
     format.setRenderableType(QSurfaceFormat::OpenGL);
-    //format.setOption(QSurfaceFormat::DebugContext);
     format.setDepthBufferSize(24);
-    //format.setAlphaBufferSize(8);
     format.setSamples(ds->getMultiSamples());
     format.setStencilBufferSize(ds->getMinimumNumStencilBits());
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
     QSurfaceFormat::setDefaultFormat(format);
-
-    //ds->setNumMultiSamples(8);
-
-    /*osg::ref_ptr<osg::GraphicsContext::Traits> traits = new osg::GraphicsContext::Traits;
-    traits->windowName = "";
-    traits->windowDecoration = true;
-    traits->x = 0;
-    traits->y = 0;
-    traits->width = width();
-    traits->height = height();
-    traits->doubleBuffer = true;
-    traits->alpha = ds->getMinimumNumAlphaBits();
-    traits->stencil = ds->getMinimumNumStencilBits();
-    traits->sampleBuffers = ds->getMultiSamples();
-    traits->samples = ds->getNumMultiSamples();
-    // Doesn't make much sense as we're running on demand updates, and there seems to be a bug with the refresh rate when running multiple QGLWidgets
-    traits->vsync = false;*/
 
     mView = new osgViewer::View;
     updateCameraParameters( width() / static_cast<double>(height()) );
@@ -78,7 +59,6 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
     mWidget = new osgQOpenGLWidget(this);
 
     mRenderer = mWidget->getCompositeViewer();
-    //osg::ref_ptr<osgViewer::GraphicsWindowEmbedded> window = new osgViewer::GraphicsWindowEmbedded(traits);
     osg::ref_ptr<osgViewer::GraphicsWindowEmbedded> window = new osgViewer::GraphicsWindowEmbedded(0, 0, width(), height());
     mWidget->setGraphicsWindowEmbedded(window);
 
@@ -88,25 +68,6 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
 #if OSG_VERSION_GREATER_OR_EQUAL(3,5,5)
     mRenderer->setUseConfigureAffinity(false);
 #endif
-
-    /*
-    // add the thread model handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::ThreadingHandler);
-
-     // add the window size toggle handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::WindowSizeHandler);
-
-     // add the stats handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::StatsHandler);
-
-     // add the record camera path handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::RecordCameraPathHandler);
-
-     // add the LOD Scale handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::LODScaleHandler);
-
-     // add the screen capture handler
-     widget->getCompositeViewer()->addEventHandler(new osgViewer::ScreenCaptureHandler);*/
 
     QLayout* layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -460,9 +421,3 @@ void SceneWidget::selectNavigationMode (const std::string& mode)
 }
 
 }
-
-/* */
-
-
-
-/* */

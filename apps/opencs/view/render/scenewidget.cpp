@@ -9,7 +9,6 @@
 #include <QLayout>
 
 #include <osg/GraphicsContext>
-#include <osgViewer/CompositeViewer>
 #include <osgViewer/ViewerEventHandlers>
 #include <osg/LightModel>
 #include <osg/Material>
@@ -40,19 +39,6 @@ RenderWidget::RenderWidget(QWidget *parent, Qt::WindowFlags f)
     : QWidget(parent, f)
     , mRootNode(nullptr)
 {
-
-    osg::DisplaySettings* ds = osg::DisplaySettings::instance().get();
-
-    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-
-    format.setVersion(2, 1);
-    format.setRenderableType(QSurfaceFormat::OpenGL);
-    format.setDepthBufferSize(24);
-    format.setSamples(ds->getMultiSamples());
-    format.setStencilBufferSize(ds->getMinimumNumStencilBits());
-    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
-    QSurfaceFormat::setDefaultFormat(format);
-
     mView = new osgViewer::View;
     updateCameraParameters( width() / static_cast<double>(height()) );
 

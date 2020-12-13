@@ -474,8 +474,8 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
 
     const float xd = static_cast<float>(xWorldPos * (landSize - 1) / cellSize);
     const float yd = static_cast<float>(yWorldPos * (landSize - 1) / cellSize);
-    int x = static_cast<int>(xd);
-    int y = static_cast<int>(yd);
+    int x = static_cast<int>(std::floor(xd));
+    int y = static_cast<int>(std::floor(yd));
     float xFloatDifference = xd - x;
     float yFloatDifference = yd - y;
 

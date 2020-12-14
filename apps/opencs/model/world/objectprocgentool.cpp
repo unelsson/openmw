@@ -392,7 +392,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<double> distZeroToOne(0.0, 1.0);
-    const float textureOffset = 0.25f;
+    const float textureXOffset = 0.75f; //+0.25f textureOffset + 0.5f spawn middle of texture
+    const float textureYOffset = 0.25f; //-0.25f textureOffset + 0.5f spawn middle of texture
 
     CSMWorld::IdTable& landTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_Land));
@@ -419,8 +420,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                         if(landTexPointer[yInCell * landTextureSize + xInCell] == stoi(mGeneratedObjectTerrainTexType[objectCount]->currentText().toStdString().substr (hashlocation+1))+1 &&
                             distZeroToOne(mt) < mGeneratedObjectChanceSpinBoxes[objectCount]->value())
                                 placeObject(mGeneratedObjects[objectCount]->currentText(),
-                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell + textureOffset) / landTextureSize + distDisplacement(mt) , // Calculate worldPos from landtex coordinate
-                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell - textureOffset) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
+                                    cellSize * static_cast<float>((cellX * landTextureSize) + xInCell + textureXOffset) / landTextureSize + distDisplacement(mt) , // Calculate worldPos from landtex coordinate
+                                    cellSize * static_cast<float>((cellY * landTextureSize) + yInCell + textureYOffset) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     distXAndYRotation(mt), distXAndYRotation(mt), distZRotation(mt),
                                     mFollowLandShapeFactor[objectCount]->value(), mZDisplacement[objectCount]->value(),
                                     mMinZHeight[objectCount]->value(), mMaxZHeight[objectCount]->value());

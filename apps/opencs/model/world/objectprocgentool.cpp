@@ -209,6 +209,12 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     mMaxZHeight.back()->setRange(-99999999, 99999999);
     mMaxZHeight.back()->setValue(100000);
 
+    QLabel* maximumSlopeLabel;
+    maximumSlopeLabel = new QLabel(tr("Maximum slope:"));
+    mMaximumSlope.emplace_back(new QSpinBox);
+    mMaximumSlope.back()->setRange(0, 360);
+    mMaximumSlope.back()->setValue(360);
+
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjects.back());
     generatedObjectGroupBoxLayout->addWidget(chanceLabel);
     generatedObjectGroupBoxLayout->addWidget(mGeneratedObjectChanceSpinBoxes.back());
@@ -228,6 +234,8 @@ void CSMWorld::ObjectProcGenTool::createNewGenerationObject()
     generatedObjectGroupBoxLayout->addWidget(mMaxZHeight.back());
     generatedObjectGroupBoxLayout->addWidget(followLandShapeLabel);
     generatedObjectGroupBoxLayout->addWidget(mFollowLandShapeFactor.back());
+    generatedObjectGroupBoxLayout->addWidget(maximumSlopeLabel);
+    generatedObjectGroupBoxLayout->addWidget(mMaximumSlope.back());
 
     generatedObjectGroupBox->setLayout(generatedObjectGroupBoxLayout);
     mGeneratedObjectsLayout->addWidget(generatedObjectGroupBox);
@@ -345,6 +353,11 @@ void CSMWorld::ObjectProcGenTool::loadGenerationSettings()
             if (setting == "followLandShapeFactor")
             {
                 mFollowLandShapeFactor[objectCount]->setValue(boost::lexical_cast<double>(value));
+            }
+
+            if (setting == "maximumSlope")
+            {
+                mMaximumSlope[objectCount]->setValue(boost::lexical_cast<double>(value));
                 newObject = true;
             }
 
@@ -382,6 +395,8 @@ void CSMWorld::ObjectProcGenTool::saveGenerationSettings()
         settingsFile << "# Used to control object leaning towards downhill. Value 0.0 is vertical, value of 1.0 is normal to ground. \n";
         settingsFile << "# Values above 1.0 are leaning more towards horizontal. \n";
         settingsFile << "followLandShapeFactor = " << mFollowLandShapeFactor[i]->value() << "\n";
+        settingsFile << "# Maximum terrain slope (in degrees). \n";
+        settingsFile << "maximumSlope = " << mMaximumSlope[i]->value() << "\n";
         settingsFile << "\n";
     }
     settingsFile.close();
@@ -424,7 +439,8 @@ void CSMWorld::ObjectProcGenTool::placeObjectsNow()
                                     cellSize * static_cast<float>((cellY * landTextureSize) + yInCell + textureYOffset) / landTextureSize + distDisplacement(mt), // Calculate worldPos from landtex coordinate
                                     distXAndYRotation(mt), distXAndYRotation(mt), distZRotation(mt),
                                     mFollowLandShapeFactor[objectCount]->value(), mZDisplacement[objectCount]->value(),
-                                    mMinZHeight[objectCount]->value(), mMaxZHeight[objectCount]->value());
+                                    mMinZHeight[objectCount]->value(), mMaxZHeight[objectCount]->value(),
+                                    mMaximumSlope[objectCount]->value());
                     }
                 }
             }
@@ -466,7 +482,8 @@ osg::Quat CSMWorld::ObjectProcGenTool::eulerToQuat(const osg::Vec3f& euler) cons
 }
 
 void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos, float yWorldPos,
-    float xRot, float yRot, float zRot, float followLandShapeFactor, float zDisplacement, int minZHeight, int maxZHeight)
+    float xRot, float yRot, float zRot, float followLandShapeFactor, float zDisplacement, int minZHeight, int maxZHeight,
+    int maximumSlope)
 {
     CSMWorld::IdTable& referencesTable = dynamic_cast<CSMWorld::IdTable&> (
         *mDocument.getData().getTableModel (CSMWorld::UniversalId::Type_References));
@@ -546,6 +563,10 @@ void CSMWorld::ObjectProcGenTool::placeObject(QString objectId, float xWorldPos,
     float ySlopeWhenX1 = zWorldPosXPlus1YPlus1 - zWorldPosXPlus1;
     float xSlope = (xSlopeWhenY0 + xSlopeWhenY1) / 2;
     float ySlope = (ySlopeWhenX0 + ySlopeWhenX1) / 2;
+    float xAngleInDegrees = std::abs(std::atan(xSlope / (cellSize / landSize)) * (180 / osg::PI));
+    float yAngleInDegrees = std::abs(std::atan(ySlope / (cellSize / landSize)) * (180 / osg::PI));
+
+    if (xAngleInDegrees > maximumSlope || yAngleInDegrees > maximumSlope) return;
 
     zWorldPos = finalInterpolation;
 
